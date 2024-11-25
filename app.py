@@ -65,17 +65,17 @@ def get_connection_data():
             local_addr = parts[3]
             remote_addr = parts[4]
             
-            # Handle IPv4
-            if ":" in local_addr:
+            # Handle IPv4 (format: 192.168.1.1:80)
+            if "." in local_addr:
                 local_port = local_addr.split(":")[-1]
-                remote_ip = remote_addr.split(":")[0]
-            # Handle IPv6
-            elif "." not in local_addr and "[" in local_addr:
-                # IPv6 format: [::1]:80 or [2001:db8::1]:80
-                local_port = local_addr.split("]:")[-1]
-                remote_ip = remote_addr.split("]")[0][1:]  # Remove brackets
+                remote_ip = remote_addr.rsplit(":", 1)[0]  # Use rsplit to handle IPv4 port
+            # Handle IPv6 (format: 2a01:4f9:2b:1f2d::56508)
             else:
-                continue
+                try:
+                    local_port = local_addr.rsplit(":", 1)[1]  # Get port after last colon
+                    remote_ip = remote_addr.rsplit(":", 1)[0]  # Get IP without port
+                except (IndexError, ValueError):
+                    continue
                 
             if local_port not in MONITORED_PORTS:
                 continue
