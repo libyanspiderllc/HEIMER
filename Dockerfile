@@ -27,7 +27,7 @@ RUN python3 -m venv /app/venv && \
 COPY . .
 
 # Build the binary using python -m
-RUN /app/venv/bin/python -m PyInstaller build.spec --clean
+RUN /app/venv/bin/python -m PyInstaller build.spec --clean --name heimer
 
 # Create artifacts directory with correct permissions
 RUN mkdir -p /artifacts && \
