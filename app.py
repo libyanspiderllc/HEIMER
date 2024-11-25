@@ -214,6 +214,60 @@ class WhoisScreen(ModalScreen[None]):
         if event.button.id == "close-button":
             self.app.pop_screen()
 
+class ActivityLog(VerticalScroll):
+    """A widget to display application activity and messages."""
+
+    DEFAULT_CSS = """
+    ActivityLog {
+        height: 8;
+        dock: bottom;
+        background: $surface;
+        border-top: solid $primary;
+        padding: 0 1;
+    }
+
+    ActivityLog > .log-entry {
+        color: $text;
+        height: 1;
+    }
+
+    ActivityLog > .log-entry.info {
+        color: $text;
+    }
+
+    ActivityLog > .log-entry.warning {
+        color: $warning;
+    }
+
+    ActivityLog > .log-entry.error {
+        color: $error;
+    }
+
+    ActivityLog > .log-entry.success {
+        color: $success;
+    }
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.max_entries = 100
+        self.entries = []
+
+    def log_message(self, message: str, level: str = "info") -> None:
+        """Add a new message to the log."""
+        entry = Static(message, classes=f"log-entry {level}")
+        self.entries.append(entry)
+        
+        # Remove old entries if we exceed max_entries
+        while len(self.entries) > self.max_entries:
+            self.entries.pop(0)
+            if self.entries[0] in self.children:
+                self.entries[0].remove()
+
+        # Add the new entry and scroll to it
+        self.mount(entry)
+        self.scroll_end(animate=False)
+
 class ConnectionTable(DataTable):
     """A table showing network connections."""
     
@@ -240,7 +294,7 @@ class ConnectionTable(DataTable):
     def get_selected_ip(self) -> Optional[str]:
         """Get the currently selected IP address."""
         if self.selected_row_index is None:
-            self.app.notify("Please select an IP address first")
+            self.app.query_one(ActivityLog).log_message("Please select an IP address first", "warning")
             return None
         return self.get_row_at(self.selected_row_index)[0]
 
@@ -253,15 +307,16 @@ class ConnectionTable(DataTable):
         """Perform PTR lookup for selected IP."""
         ip = self.get_selected_ip()
         if ip:
-            self.app.notify("Performing PTR lookup...")
+            log = self.app.query_one(ActivityLog)
+            log.log_message(f"Performing PTR lookup for {ip}...", "info")
             result = await self.run_in_thread(perform_ptr_lookup, ip)
-            self.app.notify(f"PTR Lookup for {ip}: {result}")
+            log.log_message(f"PTR Lookup for {ip}: {result}", "success")
 
     async def action_whois_lookup(self) -> None:
         """Perform WHOIS lookup for selected IP."""
         ip = self.get_selected_ip()
         if ip:
-            self.app.notify("Fetching WHOIS information...")
+            self.app.query_one(ActivityLog).log_message(f"Fetching WHOIS information for {ip}...", "info")
             result = await self.run_in_thread(perform_whois_lookup, ip)
             self.app.push_screen(WhoisScreen(ip, result))
 
@@ -269,25 +324,28 @@ class ConnectionTable(DataTable):
         """Check if IP is in CSF."""
         ip = self.get_selected_ip()
         if ip:
-            self.app.notify("Checking CSF...")
+            log = self.app.query_one(ActivityLog)
+            log.log_message(f"Checking CSF for {ip}...", "info")
             result = await self.run_in_thread(check_csf, ip)
-            self.app.notify(f"CSF Check for {ip}: {result}")
+            log.log_message(f"CSF Check for {ip}: {result}", "success")
 
     async def action_block_temp(self) -> None:
         """Block IP temporarily in CSF."""
         ip = self.get_selected_ip()
         if ip:
-            self.app.notify("Blocking IP temporarily...")
+            log = self.app.query_one(ActivityLog)
+            log.log_message(f"Blocking {ip} temporarily...", "warning")
             result = await self.run_in_thread(block_in_csf, ip, True)
-            self.app.notify(f"Temporary block for {ip}: {result}")
+            log.log_message(f"Temporary block for {ip}: {result}", "success")
 
     async def action_block_perm(self) -> None:
         """Block IP permanently in CSF."""
         ip = self.get_selected_ip()
         if ip:
-            self.app.notify("Blocking IP permanently...")
+            log = self.app.query_one(ActivityLog)
+            log.log_message(f"Blocking {ip} permanently...", "warning")
             result = await self.run_in_thread(block_in_csf, ip, False)
-            self.app.notify(f"Permanent block for {ip}: {result}")
+            log.log_message(f"Permanent block for {ip}: {result}", "success")
 
     def on_mount(self) -> None:
         """Set up the table columns."""
@@ -303,50 +361,66 @@ class ConnectionTable(DataTable):
         """Handle row selection."""
         self.selected_row_index = event.cursor_row
         ip = self.get_row_at(event.cursor_row)[0]
-        self.app.notify(f"Selected IP: {ip}")
+        self.app.query_one(ActivityLog).log_message(f"Selected IP: {ip}", "info")
 
-class TUIApp(App):
-    """A Textual TUI application."""
+class NetworkApp(App):
+    """The main network monitoring application."""
     
     CSS = """
     Screen {
         align: center middle;
     }
+    
+    DataTable {
+        height: 1fr;
+        border: solid green;
+    }
+    
+    WhoisScreen {
+        align: center middle;
+    }
+    
+    .whois {
+        width: 80%;
+        height: 80%;
+        border: thick $background 80%;
+        background: $surface;
+    }
     """
     
     BINDINGS = [
         ("d", "toggle_dark", "Toggle dark mode"),
-        ("q", "quit", "Quit"),
         ("r", "refresh", "Refresh data"),
     ]
-
+    
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
-        table = ConnectionTable()
-        yield TitleBox()
-        yield table
+        yield Header()
+        yield ConnectionTable()
+        yield ActivityLog()
         yield Footer()
 
     def on_mount(self) -> None:
         """Handle app mount event."""
         # Initial data load
+        self.query_one(ActivityLog).log_message("Application started", "info")
         self.query_one(ConnectionTable).update_data()
+        self.query_one(ActivityLog).log_message("Initial data loaded", "success")
 
     def action_toggle_dark(self) -> None:
         """An action to toggle dark mode."""
         self.dark = not self.dark
+        mode = "dark" if self.dark else "light"
+        self.query_one(ActivityLog).log_message(f"Switched to {mode} mode", "info")
         
     def action_refresh(self) -> None:
         """Refresh the connection data."""
+        self.query_one(ActivityLog).log_message("Refreshing connection data...", "info")
         self.query_one(ConnectionTable).update_data()
-        
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Handle button press events."""
-        if event.button.id == "refresh_btn":
-            self.action_refresh()
+        self.query_one(ActivityLog).log_message("Data refreshed", "success")
 
 def main():
-    app = TUIApp()
+    app = NetworkApp()
     app.run()
 
 if __name__ == "__main__":
