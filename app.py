@@ -364,6 +364,12 @@ class ConnectionTable(DataTable):
         ip = self.get_row_at(event.cursor_row)[0]
         self.app.query_one(ActivityLog).log_message(f"Selected IP: {ip}", "info")
 
+    def on_data_table_row_highlighted(self, event) -> None:
+        """Handle row highlight from keyboard navigation."""
+        self.selected_row_index = event.cursor_row
+        ip = self.get_row_at(event.cursor_row)[0]
+        self.app.query_one(ActivityLog).log_message(f"Selected IP: {ip}", "info")
+
 class NetworkApp(App):
     """The main network monitoring application."""
     
