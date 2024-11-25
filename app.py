@@ -127,17 +127,37 @@ def check_csf(ip):
     except FileNotFoundError:
         return "CSF not installed"
 
+def get_subnet(ip: str) -> str:
+    """Convert an IP address to its subnet with default mask (/24 for IPv4, /64 for IPv6)."""
+    try:
+        # Check if it's IPv6
+        if ":" in ip:
+            # Split the IPv6 address into segments
+            segments = ip.split(":")
+            # Take first 4 segments (64 bits) and pad with zeros
+            subnet = ":".join(segments[:4]) + "::" + "/64"
+            return subnet
+        else:
+            # For IPv4, take first 3 octets
+            segments = ip.split(".")
+            if len(segments) == 4:
+                return ".".join(segments[:3]) + ".0/24"
+            return ip + "/24"  # Fallback
+    except Exception:
+        return ip  # Return original IP if parsing fails
+
 def block_in_csf(ip: str, is_temporary: bool = True, duration: int = 600) -> str:
     """Block IP in CSF."""
+    if is_temporary:
+        cmd = ["csf", "-td", ip, str(duration)]
+    else:
+        cmd = ["csf", "-d", ip]
+        
     try:
-        if is_temporary:
-            result = subprocess.check_output(["csf", "-td", ip, str(duration)], text=True)
-            return f"Temporarily blocked for {duration} seconds"
-        else:
-            result = subprocess.check_output(["csf", "-d", ip], text=True)
-            return "Permanently blocked"
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+        return "Success"
     except subprocess.CalledProcessError as e:
-        return f"Failed to block IP: {str(e)}"
+        return f"Error: {e.stderr}"
     except FileNotFoundError:
         return "CSF not installed"
 
@@ -288,6 +308,7 @@ class ConnectionTable(DataTable):
         Binding("c", "csf_check", "CSF Check", show=True),
         Binding("t", "block_temp", "Temp Block", show=True),
         Binding("b", "block_perm", "Block", show=True),
+        Binding("s", "block_subnet", "Block Subnet", show=True),
         Binding("1", "sort(0)", "Sort by IP", show=True),
         Binding("2", "sort(1)", "Sort by Established", show=True),
         Binding("3", "sort(2)", "Sort by Time Wait", show=True),
@@ -391,6 +412,23 @@ class ConnectionTable(DataTable):
             log.log_message(f"Blocking {ip} permanently...", "warning")
             result = await self.run_in_thread(block_in_csf, ip, False)
             log.log_message(f"Permanent block for {ip}: {result}", "success")
+
+    async def action_block_subnet(self) -> None:
+        """Block the subnet of the selected IP temporarily."""
+        ip = self.get_selected_ip()
+        if not ip:
+            return
+            
+        log = self.app.query_one(ActivityLog)
+        subnet = get_subnet(ip)
+        
+        if subnet == ip:
+            log.log_message(f"Failed to calculate subnet for {ip}", "error")
+            return
+            
+        log.log_message(f"Blocking subnet {subnet} temporarily...", "info")
+        result = await self.run_in_thread(block_in_csf, subnet, True)
+        log.log_message(f"Temporary block for subnet {subnet}: {result}", "success")
 
     def on_mount(self) -> None:
         """Set up the table columns."""
