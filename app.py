@@ -88,8 +88,7 @@ def get_connection_data():
         table_data = []
         for remote_ip, ports in connections.items():
             row = [
-                remote_ip,
-                PORTS_DISPLAY
+                remote_ip
             ]
             # Add counts for each monitored state
             for state in MONITORED_STATES:
@@ -290,10 +289,9 @@ class ConnectionTable(DataTable):
         Binding("t", "block_temp", "Temp Block", show=True),
         Binding("b", "block_perm", "Block", show=True),
         Binding("1", "sort(0)", "Sort by IP", show=True),
-        Binding("2", "sort(1)", "Sort by Ports", show=True),
-        Binding("3", "sort(2)", "Sort by Established", show=True),
-        Binding("4", "sort(3)", "Sort by Time Wait", show=True),
-        Binding("5", "sort(4)", "Sort by SYN Recv", show=True),
+        Binding("2", "sort(1)", "Sort by Established", show=True),
+        Binding("3", "sort(2)", "Sort by Time Wait", show=True),
+        Binding("4", "sort(3)", "Sort by SYN Recv", show=True),
     ]
     
     def __init__(self):
@@ -334,7 +332,7 @@ class ConnectionTable(DataTable):
         
         # Log the sort action
         direction = "descending" if self._sort_reverse else "ascending"
-        column_names = ["IP", "Ports", "Established", "Time Wait", "SYN Recv"]
+        column_names = ["IP", "Established", "Time Wait", "SYN Recv"]
         message = f"Sorted by {column_names[column_index]} ({direction})"
         self.app.query_one(ActivityLog).log_message(message, "info")
         
@@ -396,14 +394,13 @@ class ConnectionTable(DataTable):
 
     def on_mount(self) -> None:
         """Set up the table columns."""
-        self.add_columns(
-            "Remote IP", 
-            PORTS_DISPLAY,
-            "ESTABLISHED",
-            "TIME_WAIT",
-            "SYN_RECV"
-        )
-
+        self.add_column("Remote IP", width=30)
+        self.add_column("ESTABLISHED", width=12)
+        self.add_column("TIME_WAIT", width=12)
+        self.add_column("SYN_RECV", width=12)
+        
+        self.update_data()
+        
     def on_data_table_row_selected(self, event) -> None:
         """Handle row selection."""
         self.selected_row_index = event.cursor_row
