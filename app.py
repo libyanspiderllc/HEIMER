@@ -63,15 +63,26 @@ def get_connection_data():
                 
             # Extract remote IP and local port
             local_addr = parts[3]
-            remote_addr = parts[4].split(":")[0]
-            local_port = local_addr.split(":")[-1]
+            remote_addr = parts[4]
             
+            # Handle IPv4
+            if ":" in local_addr:
+                local_port = local_addr.split(":")[-1]
+                remote_ip = remote_addr.split(":")[0]
+            # Handle IPv6
+            elif "." not in local_addr and "[" in local_addr:
+                # IPv6 format: [::1]:80 or [2001:db8::1]:80
+                local_port = local_addr.split("]:")[-1]
+                remote_ip = remote_addr.split("]")[0][1:]  # Remove brackets
+            else:
+                continue
+                
             if local_port not in MONITORED_PORTS:
                 continue
                 
             state = parts[5]
             if state in MONITORED_STATES:
-                connections[remote_addr][local_port][state] += 1
+                connections[remote_ip][local_port][state] += 1
         
         # Format data for table
         table_data = []
