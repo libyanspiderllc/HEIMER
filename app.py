@@ -396,7 +396,6 @@ class NetworkApp(App):
     """
     
     BINDINGS = [
-        ("d", "toggle_dark", "Toggle dark mode"),
         ("r", "refresh", "Refresh data"),
     ]
     
@@ -414,12 +413,6 @@ class NetworkApp(App):
         self.query_one(ConnectionTable).update_data()
         self.query_one(ActivityLog).log_message("Initial data loaded", "success")
 
-    def action_toggle_dark(self) -> None:
-        """An action to toggle dark mode."""
-        self.dark = not self.dark
-        mode = "dark" if self.dark else "light"
-        self.query_one(ActivityLog).log_message(f"Switched to {mode} mode", "info")
-        
     def action_refresh(self) -> None:
         """Refresh the connection data."""
         self.query_one(ActivityLog).log_message("Refreshing connection data...", "info")
