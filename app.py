@@ -223,7 +223,8 @@ class ActivityLog(VerticalScroll):
         dock: bottom;
         background: $surface;
         border-top: solid $primary;
-        padding: 0 1;
+        padding: 0 1 1 1;
+        margin-bottom: 1;
     }
 
     ActivityLog > .log-entry {
