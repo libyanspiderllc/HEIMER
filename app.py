@@ -16,6 +16,7 @@ import socket
 import asyncio
 import os
 from typing import Optional
+from datetime import datetime, timedelta
 
 # Configuration
 MONITORED_PORTS = ["80", "443"]
@@ -25,6 +26,9 @@ PORTS_DISPLAY = "/".join(MONITORED_PORTS)
 # Test mode configuration
 TEST_MODE = True  # Set to False to use real netstat
 TEST_DATA_FILE = os.path.join(os.path.dirname(__file__), "test_data", "netstat_sample.txt")
+
+# Global state for CSF status
+ip_csf_status = {}
 
 def get_netstat_output():
     """Get netstat output either from test file or real command."""
@@ -43,6 +47,64 @@ def get_netstat_output():
             return subprocess.check_output(cmd, shell=True, text=True)
         except subprocess.CalledProcessError:
             return ""
+
+def format_block_time(until_time: datetime) -> str:
+    """Format block time in a human-readable format."""
+    now = datetime.now()
+    if until_time < now:
+        return "Block expired"
+    
+    time_str = until_time.strftime("%H:%M")
+    
+    # If it's tomorrow, add the day
+    if until_time.date() > now.date():
+        time_str = until_time.strftime("%b %d %H:%M")
+    
+    return f"Blocked until {time_str}"
+
+def check_csf(ip: str) -> str:
+    """Check if IP is in CSF."""
+    try:
+        result = subprocess.check_output(["csf", "-g", ip], text=True)
+        if "DENY" in result:
+            # Try to extract if it's temporary and when it expires
+            if "Temporary block" in result:
+                for line in result.splitlines():
+                    if "expires at" in line.lower():
+                        try:
+                            # Extract and parse the expiry time
+                            time_str = line.split("expires at")[1].strip()
+                            expiry = datetime.strptime(time_str, "%a %b %d %H:%M:%S %Y")
+                            return format_block_time(expiry)
+                        except (ValueError, IndexError):
+                            pass
+                return "Temporarily blocked"
+            return "Permanently blocked"
+        return "Not blocked"
+    except subprocess.CalledProcessError:
+        return "Not blocked"
+    except FileNotFoundError:
+        return "CSF not installed"
+
+def block_in_csf(ip: str, is_temporary: bool = True, duration: int = 600) -> str:
+    """Block IP in CSF."""
+    global ip_csf_status
+    
+    if is_temporary:
+        cmd = ["csf", "-td", ip, str(duration)]
+        status = format_block_time(datetime.now() + timedelta(seconds=duration))
+    else:
+        cmd = ["csf", "-d", ip]
+        status = "Permanently blocked"
+        
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+        ip_csf_status[ip] = status
+        return "Success"
+    except subprocess.CalledProcessError as e:
+        return f"Error: {e.stderr}"
+    except FileNotFoundError:
+        return "CSF not installed"
 
 def get_connection_data():
     """Fetch and aggregate network connection data."""
@@ -88,7 +150,8 @@ def get_connection_data():
         table_data = []
         for remote_ip, ports in connections.items():
             row = [
-                remote_ip
+                remote_ip,
+                ip_csf_status.get(remote_ip, "")  # Add CSF status column
             ]
             # Add counts for each monitored state
             for state in MONITORED_STATES:
@@ -115,18 +178,6 @@ def perform_whois_lookup(ip):
     except subprocess.CalledProcessError:
         return "WHOIS lookup failed"
 
-def check_csf(ip):
-    """Check if IP is in CSF."""
-    try:
-        # Check both allow and deny lists
-        allow_result = subprocess.check_output(["csf", "-g", ip], text=True)
-        deny_result = subprocess.check_output(["csf", "-c", ip], text=True)
-        return f"Allow: {allow_result}\nDeny: {deny_result}"
-    except subprocess.CalledProcessError:
-        return "IP not found in CSF"
-    except FileNotFoundError:
-        return "CSF not installed"
-
 def get_subnet(ip: str) -> str:
     """Convert an IP address to its subnet with default mask (/24 for IPv4, /64 for IPv6)."""
     try:
@@ -145,21 +196,6 @@ def get_subnet(ip: str) -> str:
             return ip + "/24"  # Fallback
     except Exception:
         return ip  # Return original IP if parsing fails
-
-def block_in_csf(ip: str, is_temporary: bool = True, duration: int = 600) -> str:
-    """Block IP in CSF."""
-    if is_temporary:
-        cmd = ["csf", "-td", ip, str(duration)]
-    else:
-        cmd = ["csf", "-d", ip]
-        
-    try:
-        subprocess.run(cmd, check=True, capture_output=True, text=True)
-        return "Success"
-    except subprocess.CalledProcessError as e:
-        return f"Error: {e.stderr}"
-    except FileNotFoundError:
-        return "CSF not installed"
 
 class TitleBox(Static):
     """Title and welcome message widget."""
@@ -306,13 +342,14 @@ class ConnectionTable(DataTable):
         Binding("p", "ptr_lookup", "PTR Lookup", show=True),
         Binding("w", "whois_lookup", "WHOIS", show=True),
         Binding("c", "csf_check", "CSF Check", show=True),
-        Binding("t", "block_temp", "Temp Block", show=True),
-        Binding("b", "block_perm", "Block", show=True),
-        Binding("s", "block_subnet", "Block Subnet", show=True),
+        Binding("t", "block_temp", "Temp Block IP", show=True),
+        Binding("s", "block_subnet", "Temp Block Subnet", show=True),
+        Binding("b", "block_perm", "Perm Block IP", show=True),
         Binding("1", "sort(0)", "Sort by IP", show=True),
-        Binding("2", "sort(1)", "Sort by Established", show=True),
-        Binding("3", "sort(2)", "Sort by Time Wait", show=True),
-        Binding("4", "sort(3)", "Sort by SYN Recv", show=True),
+        Binding("2", "sort(1)", "Sort by CSF Status", show=True),
+        Binding("3", "sort(2)", "Sort by Established", show=True),
+        Binding("4", "sort(3)", "Sort by Time Wait", show=True),
+        Binding("5", "sort(4)", "Sort by SYN Recv", show=True),
     ]
     
     def __init__(self):
@@ -353,7 +390,7 @@ class ConnectionTable(DataTable):
         
         # Log the sort action
         direction = "descending" if self._sort_reverse else "ascending"
-        column_names = ["IP", "Established", "Time Wait", "SYN Recv"]
+        column_names = ["IP", "CSF Status", "ESTABLISHED", "TIME_WAIT", "SYN_RECV"]
         message = f"Sorted by {column_names[column_index]} ({direction})"
         self.app.query_one(ActivityLog).log_message(message, "info")
         
@@ -389,29 +426,30 @@ class ConnectionTable(DataTable):
     async def action_csf_check(self) -> None:
         """Check if IP is in CSF."""
         ip = self.get_selected_ip()
-        if ip:
-            log = self.app.query_one(ActivityLog)
-            log.log_message(f"Checking CSF for {ip}...", "info")
-            result = await self.run_in_thread(check_csf, ip)
-            log.log_message(f"CSF Check for {ip}: {result}", "success")
+        if not ip:
+            return
+            
+        log = self.app.query_one(ActivityLog)
+        log.log_message(f"Checking CSF status for {ip}...", "info")
+        status = await self.run_in_thread(check_csf, ip)
+        log.log_message(f"CSF status for {ip}: {status}", "info")
+        
+        # Update status in global state and refresh table
+        global ip_csf_status
+        ip_csf_status[ip] = status
+        self.update_data()
 
     async def action_block_temp(self) -> None:
         """Block IP temporarily in CSF."""
         ip = self.get_selected_ip()
-        if ip:
-            log = self.app.query_one(ActivityLog)
-            log.log_message(f"Blocking {ip} temporarily...", "warning")
-            result = await self.run_in_thread(block_in_csf, ip, True)
-            log.log_message(f"Temporary block for {ip}: {result}", "success")
-
-    async def action_block_perm(self) -> None:
-        """Block IP permanently in CSF."""
-        ip = self.get_selected_ip()
-        if ip:
-            log = self.app.query_one(ActivityLog)
-            log.log_message(f"Blocking {ip} permanently...", "warning")
-            result = await self.run_in_thread(block_in_csf, ip, False)
-            log.log_message(f"Permanent block for {ip}: {result}", "success")
+        if not ip:
+            return
+            
+        log = self.app.query_one(ActivityLog)
+        log.log_message(f"Blocking {ip} temporarily...", "warning")
+        result = await self.run_in_thread(block_in_csf, ip, True)
+        log.log_message(f"Temporary block for {ip}: {result}", "success")
+        self.update_data()
 
     async def action_block_subnet(self) -> None:
         """Block the subnet of the selected IP temporarily."""
@@ -429,10 +467,24 @@ class ConnectionTable(DataTable):
         log.log_message(f"Blocking subnet {subnet} temporarily...", "info")
         result = await self.run_in_thread(block_in_csf, subnet, True)
         log.log_message(f"Temporary block for subnet {subnet}: {result}", "success")
+        self.update_data()
+
+    async def action_block_perm(self) -> None:
+        """Block IP permanently in CSF."""
+        ip = self.get_selected_ip()
+        if not ip:
+            return
+            
+        log = self.app.query_one(ActivityLog)
+        log.log_message(f"Blocking {ip} permanently...", "warning")
+        result = await self.run_in_thread(block_in_csf, ip, False)
+        log.log_message(f"Permanent block for {ip}: {result}", "success")
+        self.update_data()
 
     def on_mount(self) -> None:
         """Set up the table columns."""
         self.add_column("Remote IP", width=30)
+        self.add_column("CSF Status", width=25)
         self.add_column("ESTABLISHED", width=12)
         self.add_column("TIME_WAIT", width=12)
         self.add_column("SYN_RECV", width=12)
