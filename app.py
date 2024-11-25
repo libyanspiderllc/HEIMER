@@ -408,6 +408,7 @@ class NetworkApp(App):
     
     BINDINGS = [
         ("r", "refresh", "Refresh data"),
+        ("q", "quit", "Quit"),
     ]
     
     def compose(self) -> ComposeResult:
