@@ -24,7 +24,7 @@ MONITORED_STATES = ["ESTABLISHED", "TIME_WAIT", "SYN_RECV"]
 PORTS_DISPLAY = "/".join(MONITORED_PORTS)
 
 # Test mode configuration
-TEST_MODE = True  # Set to False to use real netstat
+TEST_MODE = False  # Set to False to use real netstat
 TEST_DATA_FILE = os.path.join(os.path.dirname(__file__), "test_data", "netstat_sample.txt")
 
 # Global state for CSF status
@@ -336,172 +336,169 @@ class ActivityLog(VerticalScroll):
         self.scroll_end(animate=False)
 
 class ConnectionTable(DataTable):
-    """A table showing network connections."""
-    
+    """A custom DataTable for displaying network connections."""
+
     BINDINGS = [
-        Binding("p", "ptr_lookup", "PTR Lookup", show=True),
-        Binding("w", "whois_lookup", "WHOIS", show=True),
-        Binding("c", "csf_check", "CSF Check", show=True),
-        Binding("t", "block_temp", "Temp Block IP", show=True),
-        Binding("s", "block_subnet", "Temp Block Subnet", show=True),
-        Binding("b", "block_perm", "Perm Block IP", show=True),
-        Binding("1", "sort(0)", "Sort by IP", show=True),
-        Binding("2", "sort(1)", "Sort by CSF Status", show=True),
-        Binding("3", "sort(2)", "Sort by Established", show=True),
-        Binding("4", "sort(3)", "Sort by Time Wait", show=True),
-        Binding("5", "sort(4)", "Sort by SYN Recv", show=True),
+        ("p", "ptr_lookup", "PTR Lookup"),
+        ("w", "whois_lookup", "WHOIS Lookup"),
+        ("c", "csf_check", "CSF Check"),
+        ("t", "temp_block", "Temp Block IP"),
+        ("s", "temp_block_subnet", "Temp Block Subnet"),
+        ("b", "perm_block", "Perm Block IP"),
+        ("1", "sort(0)", "Sort IP"),
+        ("2", "sort(1)", "Sort CSF"),
+        *[
+            (str(i + 3), f"sort({i + 2})", f"Sort {state}")
+            for i, state in enumerate(MONITORED_STATES)
+        ],
+        ("r", "refresh", "Refresh Data"),
+        ("q", "quit", "Quit"),
     ]
-    
-    def __init__(self):
-        super().__init__()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.current_data = []
+        self.sorted_column = None
+        self.sort_reverse = False
+
+    def on_mount(self) -> None:
+        """Set up the data table."""
         self.cursor_type = "row"
-        self.selected_row_index = None
-        self._sort_column = 0  # Track current sort column
-        self._sort_reverse = False  # Track sort direction
         
-    def update_data(self):
-        """Update table with fresh connection data."""
+        # Add columns: Remote IP, CSF Status, and monitored states
+        self.add_column("Remote IP", width=30)
+        self.add_column("CSF Status", width=25)
+        for state in MONITORED_STATES:
+            self.add_column(state, width=12)
+            
+        self.update_data()
+
+    def update_data(self) -> None:
+        """Update the table with fresh connection data."""
+        self.current_data = get_connection_data()
+        self.refresh_view()
+
+    def refresh_view(self) -> None:
+        """Refresh the table view using current data."""
         # Clear existing rows
         self.clear()
         
-        # Get fresh data
-        data = get_connection_data()
-        
         # Sort data if needed
-        if self._sort_column is not None:
-            data.sort(key=lambda x: x[self._sort_column], reverse=self._sort_reverse)
-        
-        # Add rows
-        for row in data:
-            self.add_row(*row)
-            
+        if self.sorted_column is not None:
+            self.current_data.sort(
+                key=lambda x: x[self.sorted_column],
+                reverse=self.sort_reverse
+            )
+
+        # Add rows with current data
+        for row_data in self.current_data:
+            self.add_row(*row_data)
+
     def action_sort(self, column_index: int) -> None:
         """Sort the table by the specified column."""
-        if self._sort_column == column_index:
-            # If already sorting by this column, toggle direction
-            self._sort_reverse = not self._sort_reverse
+        if self.sorted_column == column_index:
+            self.sort_reverse = not self.sort_reverse
         else:
-            # New column, sort ascending
-            self._sort_column = column_index
-            self._sort_reverse = False
-            
-        # Update the table with new sorting
-        self.update_data()
+            self.sorted_column = column_index
+            self.sort_reverse = False
         
-        # Log the sort action
-        direction = "descending" if self._sort_reverse else "ascending"
-        column_names = ["IP", "CSF Status", "ESTABLISHED", "TIME_WAIT", "SYN_RECV"]
-        message = f"Sorted by {column_names[column_index]} ({direction})"
-        self.app.query_one(ActivityLog).log_message(message, "info")
-        
-    def get_selected_ip(self) -> Optional[str]:
-        """Get the currently selected IP address."""
-        if self.selected_row_index is None:
-            self.app.query_one(ActivityLog).log_message("Please select an IP address first", "warning")
-            return None
-        return self.get_row_at(self.selected_row_index)[0]
+        self.refresh_view()
 
-    async def run_in_thread(self, func, *args):
-        """Run a function in a thread pool."""
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, func, *args)
-
-    async def action_ptr_lookup(self) -> None:
-        """Perform PTR lookup for selected IP."""
-        ip = self.get_selected_ip()
-        if ip:
-            log = self.app.query_one(ActivityLog)
-            log.log_message(f"Performing PTR lookup for {ip}...", "info")
-            result = await self.run_in_thread(perform_ptr_lookup, ip)
-            log.log_message(f"PTR Lookup for {ip}: {result}", "success")
-
-    async def action_whois_lookup(self) -> None:
-        """Perform WHOIS lookup for selected IP."""
-        ip = self.get_selected_ip()
-        if ip:
-            self.app.query_one(ActivityLog).log_message(f"Fetching WHOIS information for {ip}...", "info")
-            result = await self.run_in_thread(perform_whois_lookup, ip)
-            self.app.push_screen(WhoisScreen(ip, result))
-
-    async def action_csf_check(self) -> None:
-        """Check if IP is in CSF."""
-        ip = self.get_selected_ip()
-        if not ip:
-            return
-            
-        log = self.app.query_one(ActivityLog)
-        log.log_message(f"Checking CSF status for {ip}...", "info")
-        status = await self.run_in_thread(check_csf, ip)
-        log.log_message(f"CSF status for {ip}: {status}", "info")
-        
-        # Update status in global state and refresh table
-        global ip_csf_status
-        ip_csf_status[ip] = status
+    def action_refresh(self) -> None:
+        """Refresh the connection data."""
         self.update_data()
 
-    async def action_block_temp(self) -> None:
-        """Block IP temporarily in CSF."""
-        ip = self.get_selected_ip()
-        if not ip:
-            return
-            
-        log = self.app.query_one(ActivityLog)
-        log.log_message(f"Blocking {ip} temporarily...", "warning")
-        result = await self.run_in_thread(block_in_csf, ip, True)
-        log.log_message(f"Temporary block for {ip}: {result}", "success")
-        self.update_data()
+    def action_ptr_lookup(self) -> None:
+        """Perform PTR lookup for the selected IP."""
+        if self.cursor_row is not None:
+            ip = self.get_row_at(self.cursor_row)[0]
+            try:
+                hostname = socket.gethostbyaddr(ip)[0]
+                self.notify(f"PTR lookup for {ip}: {hostname}")
+            except (socket.herror, socket.gaierror) as e:
+                self.notify(f"PTR lookup failed for {ip}: {str(e)}")
 
-    async def action_block_subnet(self) -> None:
-        """Block the subnet of the selected IP temporarily."""
-        ip = self.get_selected_ip()
-        if not ip:
-            return
-            
-        log = self.app.query_one(ActivityLog)
-        subnet = get_subnet(ip)
-        
-        if subnet == ip:
-            log.log_message(f"Failed to calculate subnet for {ip}", "error")
-            return
-            
-        log.log_message(f"Blocking subnet {subnet} temporarily...", "info")
-        result = await self.run_in_thread(block_in_csf, subnet, True)
-        log.log_message(f"Temporary block for subnet {subnet}: {result}", "success")
-        self.update_data()
+    def action_whois_lookup(self) -> None:
+        """Perform WHOIS lookup for the selected IP."""
+        if self.cursor_row is not None:
+            ip = self.get_row_at(self.cursor_row)[0]
+            try:
+                result = subprocess.run(["whois", ip], capture_output=True, text=True)
+                self.notify(f"WHOIS lookup for {ip}:\n{result.stdout[:500]}...")
+            except subprocess.CalledProcessError as e:
+                self.notify(f"WHOIS lookup failed for {ip}: {str(e)}")
 
-    async def action_block_perm(self) -> None:
-        """Block IP permanently in CSF."""
-        ip = self.get_selected_ip()
-        if not ip:
-            return
+    def action_csf_check(self) -> None:
+        """Check if the selected IP is blocked in CSF."""
+        if self.cursor_row is not None:
+            ip = self.get_row_at(self.cursor_row)[0]
+            try:
+                result = subprocess.run(["csf", "-g", ip], capture_output=True, text=True)
+                status = "Blocked" if "DENY" in result.stdout else "Not blocked"
+                self.notify(f"CSF status for {ip}: {status}")
+                
+                # Update the CSF status in current_data
+                row_data = list(self.get_row_at(self.cursor_row))
+                row_data[1] = status  # CSF Status is the second column
+                self.current_data[self.cursor_row] = tuple(row_data)
+                
+                # Refresh the view
+                self.refresh_view()
+                
+            except subprocess.CalledProcessError as e:
+                self.notify(f"CSF check failed for {ip}: {str(e)}")
+
+    def _block_ip(self, ip: str, temp: bool = True, subnet: bool = False) -> None:
+        """Helper function to block an IP address."""
+        try:
+            if subnet:
+                # For IPv4, block /24, for IPv6, block /64
+                if ":" in ip:
+                    ip = f"{ip}/64"
+                else:
+                    ip = f"{ip}/24"
+
+            cmd = ["csf", "-td" if temp else "-d", ip]
+            result = subprocess.run(cmd, capture_output=True, text=True)
             
-        log = self.app.query_one(ActivityLog)
-        log.log_message(f"Blocking {ip} permanently...", "warning")
-        result = await self.run_in_thread(block_in_csf, ip, False)
-        log.log_message(f"Permanent block for {ip}: {result}", "success")
-        self.update_data()
+            if result.returncode == 0:
+                duration = "temporarily" if temp else "permanently"
+                target = "subnet" if subnet else "IP"
+                self.notify(f"{target} {ip} {duration} blocked")
+                
+                # Update the CSF status in current_data for all matching IPs
+                block_prefix = ip.split("/")[0]
+                for i, row in enumerate(self.current_data):
+                    if row[0].startswith(block_prefix):
+                        row_data = list(row)
+                        row_data[1] = f"Blocked ({'temp' if temp else 'perm'})"  # CSF Status is the second column
+                        self.current_data[i] = tuple(row_data)
+                
+                # Refresh the view
+                self.refresh_view()
+                
+            else:
+                self.notify(f"Failed to block {ip}: {result.stderr}")
+        except subprocess.CalledProcessError as e:
+            self.notify(f"Failed to block {ip}: {str(e)}")
 
-    def on_mount(self) -> None:
-        """Set up the table columns."""
-        self.add_column("Remote IP", width=30)
-        self.add_column("CSF Status", width=25)
-        self.add_column("ESTABLISHED", width=12)
-        self.add_column("TIME_WAIT", width=12)
-        self.add_column("SYN_RECV", width=12)
-        
-        self.update_data()
-        
-    def on_data_table_row_selected(self, event) -> None:
-        """Handle row selection."""
-        self.selected_row_index = event.cursor_row
-        ip = self.get_row_at(event.cursor_row)[0]
-        self.app.query_one(ActivityLog).log_message(f"Selected IP: {ip}", "info")
+    def action_temp_block(self) -> None:
+        """Temporarily block the selected IP."""
+        if self.cursor_row is not None:
+            ip = self.get_row_at(self.cursor_row)[0]
+            self._block_ip(ip, temp=True)
 
-    def on_data_table_row_highlighted(self, event) -> None:
-        """Handle row highlight from keyboard navigation."""
-        self.selected_row_index = event.cursor_row
-        ip = self.get_row_at(event.cursor_row)[0]
-        self.app.query_one(ActivityLog).log_message(f"Selected IP: {ip}", "info")
+    def action_temp_block_subnet(self) -> None:
+        """Temporarily block the subnet of the selected IP."""
+        if self.cursor_row is not None:
+            ip = self.get_row_at(self.cursor_row)[0]
+            self._block_ip(ip, temp=True, subnet=True)
+
+    def action_perm_block(self) -> None:
+        """Permanently block the selected IP."""
+        if self.cursor_row is not None:
+            ip = self.get_row_at(self.cursor_row)[0]
+            self._block_ip(ip, temp=False)
 
 class NetworkApp(App):
     """The main network monitoring application."""
