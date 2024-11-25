@@ -1,1 +1,2 @@
-textual>=0.40.0
+textual>=0.32.0
+pyinstaller>=5.13.0
