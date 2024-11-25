@@ -289,20 +289,55 @@ class ConnectionTable(DataTable):
         Binding("c", "csf_check", "CSF Check", show=True),
         Binding("t", "block_temp", "Temp Block", show=True),
         Binding("b", "block_perm", "Block", show=True),
+        Binding("1", "sort(0)", "Sort by IP", show=True),
+        Binding("2", "sort(1)", "Sort by Ports", show=True),
+        Binding("3", "sort(2)", "Sort by Established", show=True),
+        Binding("4", "sort(3)", "Sort by Time Wait", show=True),
+        Binding("5", "sort(4)", "Sort by SYN Recv", show=True),
     ]
     
     def __init__(self):
         super().__init__()
         self.cursor_type = "row"
         self.selected_row_index = None
-    
+        self._sort_column = 0  # Track current sort column
+        self._sort_reverse = False  # Track sort direction
+        
     def update_data(self):
         """Update table with fresh connection data."""
+        # Clear existing rows
         self.clear()
-        self.selected_row_index = None
-        for row in get_connection_data():
+        
+        # Get fresh data
+        data = get_connection_data()
+        
+        # Sort data if needed
+        if self._sort_column is not None:
+            data.sort(key=lambda x: x[self._sort_column], reverse=self._sort_reverse)
+        
+        # Add rows
+        for row in data:
             self.add_row(*row)
-
+            
+    def action_sort(self, column_index: int) -> None:
+        """Sort the table by the specified column."""
+        if self._sort_column == column_index:
+            # If already sorting by this column, toggle direction
+            self._sort_reverse = not self._sort_reverse
+        else:
+            # New column, sort ascending
+            self._sort_column = column_index
+            self._sort_reverse = False
+            
+        # Update the table with new sorting
+        self.update_data()
+        
+        # Log the sort action
+        direction = "descending" if self._sort_reverse else "ascending"
+        column_names = ["IP", "Ports", "Established", "Time Wait", "SYN Recv"]
+        message = f"Sorted by {column_names[column_index]} ({direction})"
+        self.app.query_one(ActivityLog).log_message(message, "info")
+        
     def get_selected_ip(self) -> Optional[str]:
         """Get the currently selected IP address."""
         if self.selected_row_index is None:
