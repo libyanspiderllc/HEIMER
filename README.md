@@ -1,4 +1,6 @@
-# Arcane Network Monitor
+# HEIMER - Network Security Monitor
+
+*Named after Professor Cecil B. Heimerdinger, the Revered Inventor*
 
 A terminal-based network connection monitoring tool with advanced IP management capabilities.
 

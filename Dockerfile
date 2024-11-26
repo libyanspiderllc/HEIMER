@@ -17,16 +17,17 @@ WORKDIR /app
 
 # Copy only requirements first to leverage Docker cache
 COPY requirements.txt .
-RUN python3 -m venv venv && \
-    . venv/bin/activate && \
-    pip install --no-cache-dir -r requirements.txt
+
+# Install dependencies directly with python
+RUN python3 -m venv /app/venv && \
+    /app/venv/bin/pip install --no-cache-dir "textual>=0.32.0,<0.33.0" && \
+    /app/venv/bin/python -m pip install --no-cache-dir "pyinstaller>=5.13.0,<6.0.0"
 
 # Copy the rest of the application
 COPY . .
 
-# Build the binary
-RUN . venv/bin/activate && \
-    pyinstaller build.spec --clean
+# Build the binary using python -m
+RUN /app/venv/bin/python -m PyInstaller build.spec --clean
 
 # Create artifacts directory with correct permissions
 RUN mkdir -p /artifacts && \

@@ -1,4 +1,13 @@
 # -*- mode: python ; coding: utf-8 -*-
+import subprocess
+import sys
+
+# Check GLIBC version compatibility
+try:
+    glibc_version = subprocess.check_output(['ldd', '--version']).decode().split('\n')[0].split()[-1]
+    print(f"Building with GLIBC version: {glibc_version}")
+except:
+    print("Warning: Could not determine GLIBC version")
 
 block_cipher = None
 
@@ -28,7 +37,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='arcane',
+    name='heimer',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
