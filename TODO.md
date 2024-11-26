@@ -1,0 +1,4 @@
+- Exclude loopback addresses from Remote IPs
+- Add correlation with Apache status page
+- Add attack type detection
+- Exclude server own IP from Remote IPs

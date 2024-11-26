@@ -7,6 +7,7 @@ from textual.coordinate import Coordinate
 from textual import events
 from textual.binding import Binding
 from textual.screen import ModalScreen
+from textual.css.query import NoMatches
 from rich.text import Text
 from rich.syntax import Syntax
 import subprocess
@@ -24,7 +25,7 @@ MONITORED_STATES = ["ESTABLISHED", "TIME_WAIT", "SYN_RECV"]
 PORTS_DISPLAY = "/".join(MONITORED_PORTS)
 
 # Test mode configuration
-TEST_MODE = False  # Set to False to use real netstat
+TEST_MODE = True  # Set to False to use real netstat
 TEST_DATA_FILE = os.path.join(os.path.dirname(__file__), "test_data", "netstat_sample.txt")
 
 # Global state for CSF status
@@ -211,46 +212,34 @@ class TitleBox(Static):
         yield Static("Network Connection Monitor", classes="title")
         yield Button("Refresh", variant="primary", id="refresh_btn")
 
-class WhoisScreen(ModalScreen[None]):
-    """Modal screen for displaying WHOIS information."""
-    
-    BINDINGS = [
-        Binding("escape", "app.pop_screen", "Close"),
-        Binding("q", "app.pop_screen", "Close"),
-    ]
-    
+class WhoisScreen(ModalScreen):
+    """A modal screen for displaying WHOIS information."""
+
     DEFAULT_CSS = """
     WhoisScreen {
         align: center middle;
     }
-    
-    #whois-container {
+
+    .whois-modal {
         width: 90%;
         height: 90%;
-        border: thick $primary;
         background: $surface;
+        border: heavy $primary;
+        padding: 1 2;
+    }
+
+    .whois-data {
+        height: 1fr;
+        overflow-y: auto;
+        margin: 1 0;
         padding: 1;
+        background: $surface-darken-1;
+        border: solid $primary;
     }
-    
-    #whois-content {
-        width: 100%;
-        height: 100%;
-        background: $surface;
-        overflow-y: scroll;
-    }
-    
-    #whois-header {
-        background: $accent;
-        color: $text;
-        padding: 1;
-        text-align: center;
-        width: 100%;
-    }
-    
+
     #close-button {
-        dock: bottom;
         width: 100%;
-        margin: 1;
+        margin-top: 1;
     }
     """
 
@@ -260,25 +249,17 @@ class WhoisScreen(ModalScreen[None]):
         self.whois_data = whois_data
 
     def compose(self) -> ComposeResult:
-        with Container(id="whois-container"):
-            yield Label(f"WHOIS Information - {self.ip}", id="whois-header")
-            with VerticalScroll(id="whois-content"):
-                # Format WHOIS data with syntax highlighting
-                syntax = Syntax(
-                    self.whois_data,
-                    "whois",
-                    theme="monokai",
-                    word_wrap=True,
-                    padding=(0, 1),
-                )
-                yield Static(syntax)
-            with Center():
-                yield Button("Close (ESC/Q)", variant="primary", id="close-button")
+        yield Container(
+            Header(f"WHOIS Information for {self.ip}"),
+            Static(self.whois_data, classes="whois-data"),
+            Button("Close", variant="primary", id="close-button"),
+            classes="whois-modal"
+        )
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Handle button presses."""
+        """Handle button press events."""
         if event.button.id == "close-button":
-            self.app.pop_screen()
+            self.dismiss()
 
 class ActivityLog(VerticalScroll):
     """A widget to display application activity and messages."""
@@ -406,7 +387,18 @@ class ConnectionTable(DataTable):
 
     def action_refresh(self) -> None:
         """Refresh the connection data."""
+        self.app.query_one(ActivityLog).log_message("Refreshing connection data...", "info")
         self.update_data()
+        self.app.query_one(ActivityLog).log_message("Data refreshed", "success")
+
+    def _log_message(self, message: str, level: str = "info") -> None:
+        """Helper method to safely log messages."""
+        try:
+            activity_log = self.app.query_one(ActivityLog)
+            activity_log.log_message(message, level)
+        except NoMatches:
+            # Fallback to notification if ActivityLog is not available
+            self.notify(message)
 
     def action_ptr_lookup(self) -> None:
         """Perform PTR lookup for the selected IP."""
@@ -414,9 +406,9 @@ class ConnectionTable(DataTable):
             ip = self.get_row_at(self.cursor_row)[0]
             try:
                 hostname = socket.gethostbyaddr(ip)[0]
-                self.notify(f"PTR lookup for {ip}: {hostname}")
+                self._log_message(f"PTR lookup for {ip}: {hostname}", "success")
             except (socket.herror, socket.gaierror) as e:
-                self.notify(f"PTR lookup failed for {ip}: {str(e)}")
+                self._log_message(f"PTR lookup failed for {ip}: {str(e)}", "error")
 
     def action_whois_lookup(self) -> None:
         """Perform WHOIS lookup for the selected IP."""
@@ -424,9 +416,10 @@ class ConnectionTable(DataTable):
             ip = self.get_row_at(self.cursor_row)[0]
             try:
                 result = subprocess.run(["whois", ip], capture_output=True, text=True)
-                self.notify(f"WHOIS lookup for {ip}:\n{result.stdout[:500]}...")
+                self.app.push_screen(WhoisScreen(ip, result.stdout))
+                self._log_message(f"WHOIS lookup for {ip} completed", "success")
             except subprocess.CalledProcessError as e:
-                self.notify(f"WHOIS lookup failed for {ip}: {str(e)}")
+                self._log_message(f"WHOIS lookup failed for {ip}: {str(e)}", "error")
 
     def action_csf_check(self) -> None:
         """Check if the selected IP is blocked in CSF."""
@@ -435,7 +428,10 @@ class ConnectionTable(DataTable):
             try:
                 result = subprocess.run(["csf", "-g", ip], capture_output=True, text=True)
                 status = "Blocked" if "DENY" in result.stdout else "Not blocked"
-                self.notify(f"CSF status for {ip}: {status}")
+                self._log_message(
+                    f"CSF status for {ip}: {status}", 
+                    "warning" if status == "Blocked" else "success"
+                )
                 
                 # Update the CSF status in current_data
                 row_data = list(self.get_row_at(self.cursor_row))
@@ -446,7 +442,7 @@ class ConnectionTable(DataTable):
                 self.refresh_view()
                 
             except subprocess.CalledProcessError as e:
-                self.notify(f"CSF check failed for {ip}: {str(e)}")
+                self._log_message(f"CSF check failed for {ip}: {str(e)}", "error")
 
     def _block_ip(self, ip: str, temp: bool = True, subnet: bool = False) -> None:
         """Helper function to block an IP address."""
@@ -464,7 +460,7 @@ class ConnectionTable(DataTable):
             if result.returncode == 0:
                 duration = "temporarily" if temp else "permanently"
                 target = "subnet" if subnet else "IP"
-                self.notify(f"{target} {ip} {duration} blocked")
+                self._log_message(f"{target} {ip} {duration} blocked", "success")
                 
                 # Update the CSF status in current_data for all matching IPs
                 block_prefix = ip.split("/")[0]
@@ -478,27 +474,30 @@ class ConnectionTable(DataTable):
                 self.refresh_view()
                 
             else:
-                self.notify(f"Failed to block {ip}: {result.stderr}")
+                self._log_message(f"Failed to block {ip}: {result.stderr}", "error")
         except subprocess.CalledProcessError as e:
-            self.notify(f"Failed to block {ip}: {str(e)}")
+            self._log_message(f"Failed to block {ip}: {str(e)}", "error")
 
     def action_temp_block(self) -> None:
         """Temporarily block the selected IP."""
         if self.cursor_row is not None:
             ip = self.get_row_at(self.cursor_row)[0]
             self._block_ip(ip, temp=True)
+            self._log_message(f"Temporarily blocked IP {ip}", "success")
 
     def action_temp_block_subnet(self) -> None:
         """Temporarily block the subnet of the selected IP."""
         if self.cursor_row is not None:
             ip = self.get_row_at(self.cursor_row)[0]
             self._block_ip(ip, temp=True, subnet=True)
+            self._log_message(f"Temporarily blocked subnet {ip}", "success")
 
     def action_perm_block(self) -> None:
         """Permanently block the selected IP."""
         if self.cursor_row is not None:
             ip = self.get_row_at(self.cursor_row)[0]
             self._block_ip(ip, temp=False)
+            self._log_message(f"Permanently blocked IP {ip}", "success")
 
 class NetworkApp(App):
     """The main network monitoring application."""
