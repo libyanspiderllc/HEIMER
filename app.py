@@ -15,13 +15,138 @@ import re
 import socket
 import asyncio
 import os
-from typing import Optional
+from typing import Optional, List, Dict, TYPE_CHECKING
 from datetime import datetime, timedelta
+import urllib.request
+from urllib.error import URLError
+from html.parser import HTMLParser
+
+if TYPE_CHECKING:
+    from typing import Type
+    from textual.widgets import DataTable
+
+class ConnectionTable:  # Forward declaration
+    pass
 
 # Configuration
 MONITORED_PORTS = ["80", "443"]
 MONITORED_STATES = ["ESTABLISHED", "TIME_WAIT", "SYN_RECV"]
 PORTS_DISPLAY = "/".join(MONITORED_PORTS)
+APACHE_STATUS_URL = "http://127.0.0.1/whm-server-status"
+
+class ApacheStatusParser(HTMLParser):
+    """Parser for Apache server-status page."""
+    
+    def __init__(self):
+        super().__init__()
+        self.in_table = False
+        self.in_tr = False
+        self.in_td = False
+        self.current_row = []
+        self.current_cell = []
+        self.connections = []
+        self.is_header = False
+        self.column_indices = {}  # Maps column names to indices
+        
+    def handle_starttag(self, tag, attrs):
+        if tag == 'table':
+            self.in_table = True
+        elif tag == 'tr':
+            self.in_tr = True
+            self.current_row = []
+        elif tag == 'th':
+            self.is_header = True
+            self.in_td = True
+            self.current_cell = []
+        elif tag == 'td':
+            self.in_td = True
+            self.current_cell = []
+            
+    def handle_endtag(self, tag):
+        if tag == 'table':
+            self.in_table = False
+        elif tag == 'tr':
+            self.in_tr = False
+            if self.is_header:
+                # Process header row to get column indices
+                self.process_header_row(self.current_row)
+                self.is_header = False
+            else:
+                # Process data row
+                self.process_data_row(self.current_row)
+        elif tag in ('th', 'td'):
+            self.in_td = False
+            cell_content = ''.join(self.current_cell).strip()
+            self.current_row.append(cell_content)
+            self.current_cell = []
+            
+    def handle_data(self, data):
+        if self.in_td:
+            self.current_cell.append(data)
+            
+    def process_header_row(self, row):
+        """Process the header row to map column names to indices."""
+        for i, header in enumerate(row):
+            self.column_indices[header.lower()] = i
+            
+    def process_data_row(self, row):
+        """Process a data row and extract connection information."""
+        if not row or len(row) < len(self.column_indices):
+            return
+            
+        try:
+            conn = {
+                'client_ip': row[self.column_indices['client']],
+                'protocol': row[self.column_indices['protocol']],
+                'vhost': row[self.column_indices['vhost']],
+                'request': row[self.column_indices['request']],
+                'srv': row[self.column_indices['srv']],
+                'pid': row[self.column_indices['pid']],
+                'cpu': row[self.column_indices['cpu']],
+                'ss': row[self.column_indices['ss']],  # Seconds since beginning of most recent request
+                'acc': row[self.column_indices['acc']],  # Number of accesses this connection / this child / this slot
+                'status': row[self.column_indices['m']],  # Status of the connection
+                'conn': row[self.column_indices['conn']]  # Kilobytes transferred this connection
+            }
+            
+            # Parse the request field into method, path, and protocol
+            request_parts = conn['request'].split()
+            if len(request_parts) >= 3:
+                conn['method'] = request_parts[0]
+                conn['path'] = request_parts[1]
+                conn['protocol_version'] = request_parts[2]
+            else:
+                conn['method'] = ''
+                conn['path'] = ''
+                conn['protocol_version'] = ''
+                
+            # Only add connections that have actual client data
+            if conn['client_ip'] and conn['client_ip'] not in ('-', ''):
+                self.connections.append(conn)
+                
+        except (KeyError, IndexError) as e:
+            # Skip malformed rows
+            pass
+            
+    def get_connections(self) -> List[Dict[str, str]]:
+        """Return the list of parsed connections."""
+        return self.connections
+
+def get_apache_status(ip: str) -> List[Dict[str, str]]:
+    """Fetch and parse Apache status page for connections from specific IP."""
+    try:
+        with urllib.request.urlopen(APACHE_STATUS_URL) as response:
+            html = response.read().decode('utf-8')
+            
+        parser = ApacheStatusParser()
+        parser.feed(html)
+        
+        # Filter connections for specific IP
+        return [conn for conn in parser.get_connections() if conn['client_ip'] == ip]
+    except URLError as e:
+        return []
+    except Exception as e:
+        return []
 
 # Test mode configuration
 TEST_MODE = False  # Set to False to use real netstat
@@ -283,6 +408,158 @@ class WhoisScreen(ModalScreen[None]):
         if event.button.id == "close-button":
             self.app.pop_screen()
 
+class ApacheStatusScreen(ModalScreen):
+    """Modal screen for displaying Apache status information."""
+    
+    BINDINGS = [
+        Binding("escape", "app.pop_screen", "Close"),
+        Binding("q", "app.pop_screen", "Close"),
+        Binding("r", "refresh", "Refresh", show=True),
+    ]
+    
+    DEFAULT_CSS = """
+    ApacheStatusScreen {
+        align: center middle;
+    }
+    
+    #status-container {
+        width: 95%;
+        height: 95%;
+        border: thick $primary;
+        background: $surface;
+        padding: 1;
+    }
+    
+    #status-header {
+        background: $accent;
+        color: $text;
+        padding: 1;
+        text-align: center;
+        width: 100%;
+    }
+    
+    #status-table {
+        width: 100%;
+        height: 85%;
+    }
+    
+    #close-button {
+        dock: bottom;
+        width: 100%;
+        margin: 1;
+    }
+    
+    #refresh-message {
+        color: $success;
+        text-align: center;
+        margin: 1;
+    }
+    """
+    
+    def __init__(self, ip: str, connections: List[Dict[str, str]], connection_table: 'ConnectionTable'):
+        super().__init__()
+        self.ip = ip
+        self.connections = connections
+        self.refresh_message = Static("", id="refresh-message")
+        self.connection_table = connection_table
+        
+    def compose(self) -> ComposeResult:
+        with Container(id="status-container"):
+            yield Label(f"Apache Status for {self.ip}", id="status-header")
+            yield self.refresh_message
+            
+            # Create DataTable
+            table = DataTable(id="status-table")
+            table.add_columns(
+                "Server",
+                "Status",
+                "VHost",
+                "Method",
+                "Path",
+                "Protocol",
+                "CPU%",
+                "Accesses",
+                "Traffic(KB)",
+                "Time(s)"
+            )
+            
+            # Add rows to table
+            if self.connections:
+                for conn in self.connections:
+                    table.add_row(
+                        conn['srv'],
+                        conn['status'] or '.',
+                        conn['vhost'],
+                        conn['method'],
+                        conn['path'],
+                        f"{conn['protocol']} {conn['protocol_version']}",
+                        conn['cpu'],
+                        conn['acc'],
+                        conn['conn'],
+                        conn['ss']
+                    )
+            else:
+                table.add_row(
+                    "No active connections found",
+                    "", "", "", "", "", "", "", "", ""
+                )
+                
+            yield table
+            yield Button("Close", variant="primary", id="close-button")
+            
+    async def action_refresh(self) -> None:
+        """Refresh the Apache status data."""
+        self.refresh_message.update("Refreshing...")
+        
+        # Get fresh connection data
+        try:
+            new_connections = await self.connection_table.run_in_thread(
+                get_apache_status, self.ip
+            )
+            
+            # Clear existing table data
+            table = self.query_one(DataTable)
+            table.clear()
+            
+            # Add new data
+            if new_connections:
+                for conn in new_connections:
+                    table.add_row(
+                        conn['srv'],
+                        conn['status'] or '.',
+                        conn['vhost'],
+                        conn['method'],
+                        conn['path'],
+                        f"{conn['protocol']} {conn['protocol_version']}",
+                        conn['cpu'],
+                        conn['acc'],
+                        conn['conn'],
+                        conn['ss']
+                    )
+                self.refresh_message.update(f"Refreshed: {len(new_connections)} connections found")
+            else:
+                table.add_row(
+                    "No active connections found",
+                    "", "", "", "", "", "", "", "", ""
+                )
+                self.refresh_message.update("Refreshed: No active connections found")
+                
+            self.connections = new_connections
+            
+        except Exception as e:
+            self.refresh_message.update(f"Error refreshing: {str(e)}")
+            
+        # Schedule the message to clear after 3 seconds
+        self.set_timer(3.0, self.clear_refresh_message)
+            
+    def clear_refresh_message(self) -> None:
+        """Clear the refresh message."""
+        self.refresh_message.update("")
+            
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "close-button":
+            self.app.pop_screen()
+
 class ActivityLog(VerticalScroll):
     """A widget to display application activity and messages."""
 
@@ -348,6 +625,7 @@ class ConnectionTable(DataTable):
         Binding("t", "block_temp", "Temp Block IP", show=True),
         Binding("s", "block_subnet", "Temp Block Subnet", show=True),
         Binding("b", "block_perm", "Perm Block IP", show=True),
+        Binding("a", "apache_status", "Apache Status", show=True),
         Binding("1", "sort(0)", "Sort by IP", show=True),
         Binding("2", "sort(1)", "Sort by CSF Status", show=True),
         Binding("3", "sort(2)", "Sort by Established", show=True),
@@ -473,6 +751,25 @@ class ConnectionTable(DataTable):
         result = await self.run_in_thread(block_in_csf, ip, False)
         log.log_message(f"Permanent block for {ip}: {result}", "success")
         self._refresh_table_display()
+
+    async def action_apache_status(self) -> None:
+        """Show Apache status information for selected IP."""
+        ip = self.get_selected_ip()
+        if not ip:
+            return
+            
+        log = self.app.query_one(ActivityLog)
+        log.log_message(f"Fetching Apache status for {ip}...", "info")
+        
+        # Fetch Apache status in a thread to avoid blocking
+        connections = await self.run_in_thread(get_apache_status, ip)
+        
+        if connections:
+            log.log_message(f"Found {len(connections)} Apache connections for {ip}", "success")
+        else:
+            log.log_message(f"No Apache connections found for {ip}", "warning")
+            
+        self.app.push_screen(ApacheStatusScreen(ip, connections, self))
 
     def action_sort(self, column_index: int) -> None:
         """Sort the table by the specified column."""
