@@ -237,7 +237,7 @@ def get_connection_data():
         output = get_netstat_output()
         
         # Initialize aggregation dictionary
-        connections = defaultdict(lambda: {port: defaultdict(int) for port in MONITORED_PORTS})
+        connections = {}
         
         # Process each line
         for line in output.splitlines():
@@ -269,7 +269,14 @@ def get_connection_data():
                 
             state = parts[5]
             if state in MONITORED_STATES:
-                connections[remote_ip][local_port][state] += 1
+                if remote_ip not in connections:
+                    connections[remote_ip] = {
+                        'ESTABLISHED': 0,
+                        'TIME_WAIT': 0,
+                        'SYN_RECV': 0,
+                        'csf_status': ip_csf_status.get(remote_ip, '')
+                    }
+                connections[remote_ip][state] += 1
         
         return connections
     except subprocess.CalledProcessError as e:
@@ -285,7 +292,7 @@ def format_connection_data(connections):
         ]
         # Add counts for each monitored state
         for state in MONITORED_STATES:
-            state_count = sum(ports[port].get(state, 0) for port in MONITORED_PORTS)
+            state_count = ports.get(state, 0)
             row.append(state_count)
         table_data.append(row)
         
@@ -615,6 +622,56 @@ class ActivityLog(VerticalScroll):
         self.mount(entry)
         self.scroll_end(animate=False)
 
+class AttackAnalyzer:
+    """Analyzes connection patterns to detect potential attacks."""
+    
+    def __init__(self):
+        self.SYN_ATTACK_THRESHOLD = 100
+        self.CONN_LIMIT_THRESHOLD = 100
+        self.HTTP_EXHAUSTION_THRESHOLD = 100
+        
+    def analyze_connections(self, connections: dict, apache_connections: List[Dict[str, str]] = None) -> Dict[str, List[str]]:
+        """
+        Analyze connections for attack patterns.
+        Returns a dictionary mapping IP addresses to lists of detected attack types.
+        """
+        results = defaultdict(list)
+        
+        # Group Apache connections by IP and VHost for WordPress attack detection
+        wp_connections = defaultdict(lambda: defaultdict(int))
+        if apache_connections:
+            for conn in apache_connections:
+                if 'wp-login' in conn.get('request', '').lower() or 'xmlrpc' in conn.get('request', '').lower():
+                    wp_connections[conn['client_ip']][conn['vhost']] += 1
+        
+        # Analyze each IP's connections
+        for ip, data in connections.items():
+            # SYN Attack Detection
+            if int(data.get('SYN_RECV', 0)) > self.SYN_ATTACK_THRESHOLD:
+                results[ip].append("SYN Attack")
+            
+            # Connection Limit Attack Detection
+            if int(data.get('ESTABLISHED', 0)) > self.CONN_LIMIT_THRESHOLD:
+                results[ip].append("ConnLimit Attack")
+            
+            # WordPress Attack Detection
+            if ip in wp_connections:
+                vhosts = wp_connections[ip]
+                total_wp_requests = sum(vhosts.values())
+                
+                if len(vhosts) > 1 and total_wp_requests > 10:
+                    results[ip].append("WP Distributed BruteForce")
+                elif len(vhosts) == 1 and total_wp_requests > 20:
+                    results[ip].append("WP Directed BruteForce")
+            
+            # HTTP Exhaustion Attack Detection
+            if apache_connections:
+                request_count = sum(1 for conn in apache_connections if conn['client_ip'] == ip)
+                if request_count > self.HTTP_EXHAUSTION_THRESHOLD:
+                    results[ip].append("HTTP Exhaustion")
+        
+        return results
+
 class ConnectionTable(DataTable):
     """A table showing network connections."""
     
@@ -626,6 +683,7 @@ class ConnectionTable(DataTable):
         Binding("s", "block_subnet", "Temp Block Subnet", show=True),
         Binding("b", "block_perm", "Perm Block IP", show=True),
         Binding("a", "apache_status", "Apache Status", show=True),
+        Binding("x", "analyze_attacks", "Analyze Attacks", show=True),
         Binding("1", "sort(0)", "Sort by IP", show=True),
         Binding("2", "sort(1)", "Sort by CSF Status", show=True),
         Binding("3", "sort(2)", "Sort by Established", show=True),
@@ -643,35 +701,68 @@ class ConnectionTable(DataTable):
         
     def update_data(self):
         """Update table with fresh connection data."""
-        # Get fresh data
         self._raw_data = get_connection_data()
-        
-        # Refresh the display
         self._refresh_table_display()
             
-    def _refresh_table_display(self):
+    def _get_sort_key(self, ip, data):
+        """Get the sort key for the given IP and data."""
+        if self._sort_column == 0:
+            return ip
+        elif self._sort_column == 1:
+            return data.get('csf_status', 'Unknown')
+        elif self._sort_column == 2:
+            return int(data.get('ESTABLISHED', 0))
+        elif self._sort_column == 3:
+            return int(data.get('TIME_WAIT', 0))
+        elif self._sort_column == 4:
+            return int(data.get('SYN_RECV', 0))
+        else:
+            return ""
+        
+    def _refresh_table_display(self) -> None:
         """Refresh the table display using current data without fetching new connections."""
-        # Clear existing rows
+        # Store current selection before clearing
+        current_ip = self.get_selected_ip()
+        
         self.clear()
+        analyzer = AttackAnalyzer()
+        attack_results = analyzer.analyze_connections(self._raw_data)
         
-        # Format the data
-        formatted_data = format_connection_data(self._raw_data)
-        
-        # Sort data if needed
-        if self._sort_column is not None:
-            formatted_data.sort(key=lambda x: x[self._sort_column], reverse=self._sort_reverse)
-        
-        # Add rows
-        for row in formatted_data:
-            self.add_row(*row)
+        # Format the data for display
+        rows_data = []
+        for ip, data in self._raw_data.items():
+            csf_status = data.get('csf_status', '')
+            established = str(data.get('ESTABLISHED', 0))
+            time_wait = str(data.get('TIME_WAIT', 0))
+            syn_recv = str(data.get('SYN_RECV', 0))
+            attacks = attack_results.get(ip, [])
+            attack_text = ", ".join(attacks) if attacks else ""
             
-    def get_selected_ip(self) -> Optional[str]:
-        """Get the currently selected IP address."""
-        if self.selected_row_index is None:
-            self.app.query_one(ActivityLog).log_message("Please select an IP address first", "warning")
-            return None
-        return self.get_row_at(self.selected_row_index)[0]
-
+            rows_data.append((ip, csf_status, established, time_wait, syn_recv, attack_text, bool(attacks)))
+        
+        # Sort the data if needed
+        if self._sort_column is not None:
+            rows_data.sort(
+                key=lambda x: (
+                    int(x[self._sort_column]) if self._sort_column in [2, 3, 4] and x[self._sort_column].isdigit()
+                    else x[self._sort_column]
+                ),
+                reverse=self._sort_reverse
+            )
+        
+        # Add rows to the table
+        for i, row_data in enumerate(rows_data):
+            self.add_row(*row_data[:-1], key=str(i))
+            if row_data[-1]:  # If has attacks
+                self.row_styles[str(i)] = "red"
+                
+        # Restore selection if possible
+        if current_ip:
+            for i, row_data in enumerate(rows_data):
+                if row_data[0] == current_ip:
+                    self.move_cursor(row=i)
+                    break
+                    
     async def run_in_thread(self, func, *args):
         """Run a function in a thread pool."""
         loop = asyncio.get_event_loop()
@@ -701,14 +792,16 @@ class ConnectionTable(DataTable):
             return
             
         log = self.app.query_one(ActivityLog)
-        log.log_message(f"Checking CSF status for {ip}...", "info")
-        status = await self.run_in_thread(check_csf, ip)
-        log.log_message(f"CSF status for {ip}: {status}", "info")
-        
-        # Update status in global state and refresh table
-        global ip_csf_status
-        ip_csf_status[ip] = status
-        self._refresh_table_display()
+        try:
+            csf_status = await self.run_in_thread(check_csf, ip)
+            # Update the CSF status in the raw data
+            if ip in self._raw_data:
+                self._raw_data[ip]['csf_status'] = csf_status
+            log.log_message(f"CSF Status for {ip}: {csf_status}", "info")
+            # Refresh display to show updated status
+            self._refresh_table_display()
+        except Exception as e:
+            log.log_message(f"Error checking CSF status: {str(e)}", "error")
 
     async def action_block_temp(self) -> None:
         """Block IP temporarily in CSF."""
@@ -771,6 +864,58 @@ class ConnectionTable(DataTable):
             
         self.app.push_screen(ApacheStatusScreen(ip, connections, self))
 
+    async def action_analyze_attacks(self) -> None:
+        """Analyze connections for potential attacks."""
+        log = self.app.query_one(ActivityLog)
+        log.log_message("Analyzing connections for potential attacks...", "info")
+        
+        try:
+            # Use current connection data
+            connections = self._raw_data
+            if not connections:
+                log.log_message("No connection data available for analysis", "warning")
+                return
+
+            # Only fetch Apache status for IPs with high connection counts
+            apache_connections = []
+            suspicious_ips = [
+                ip for ip, data in connections.items()
+                if (int(data.get('ESTABLISHED', 0)) > 50 or 
+                    int(data.get('TIME_WAIT', 0)) > 50)
+            ]
+            
+            if suspicious_ips:
+                log.log_message(f"Checking Apache status for {len(suspicious_ips)} suspicious IPs...", "info")
+                for ip in suspicious_ips:
+                    try:
+                        apache_conn = await self.run_in_thread(get_apache_status, ip)
+                        if apache_conn:
+                            apache_connections.extend(apache_conn)
+                    except Exception as e:
+                        log.log_message(f"Error fetching Apache status for {ip}: {str(e)}", "error")
+            
+            # Run attack analysis
+            analyzer = AttackAnalyzer()
+            results = analyzer.analyze_connections(connections, apache_connections)
+            
+            # Log results and update display
+            attack_count = 0
+            for ip, attacks in results.items():
+                if attacks:
+                    attack_count += 1
+                    log.log_message(f"Potential attacks detected from {ip}: {', '.join(attacks)}", "warning")
+            
+            if attack_count == 0:
+                log.log_message("No attacks detected in current connections", "success")
+            else:
+                log.log_message(f"Found potential attacks from {attack_count} IPs", "warning")
+            
+            # Refresh the table display to show attack results
+            self._refresh_table_display()
+            
+        except Exception as e:
+            log.log_message(f"Error during attack analysis: {str(e)}", "error")
+
     def action_sort(self, column_index: int) -> None:
         """Sort the table by the specified column."""
         if self._sort_column == column_index:
@@ -786,18 +931,20 @@ class ConnectionTable(DataTable):
         
         # Log the sort action
         direction = "descending" if self._sort_reverse else "ascending"
-        column_names = ["IP", "CSF Status", "ESTABLISHED", "TIME_WAIT", "SYN_RECV"]
+        column_names = ["IP", "CSF Status", "ESTABLISHED", "TIME_WAIT", "SYN_RECV", "Attack Analysis"]
         message = f"Sorted by {column_names[column_index]} ({direction})"
         self.app.query_one(ActivityLog).log_message(message, "info")
         
     def on_mount(self) -> None:
         """Set up the table columns."""
-        self.add_column("Remote IP", width=30)
-        self.add_column("CSF Status", width=25)
-        self.add_column("ESTABLISHED", width=12)
-        self.add_column("TIME_WAIT", width=12)
-        self.add_column("SYN_RECV", width=12)
-        
+        self.add_columns(
+            "IP Address",
+            "CSF Status",
+            "ESTABLISHED",
+            "TIME_WAIT", 
+            "SYN_RECV",
+            "Attack Analysis"
+        )
         self.update_data()
         
     def on_data_table_row_selected(self, event) -> None:
@@ -811,6 +958,16 @@ class ConnectionTable(DataTable):
         self.selected_row_index = event.cursor_row
         ip = self.get_row_at(event.cursor_row)[0]
         self.app.query_one(ActivityLog).log_message(f"Selected IP: {ip}", "info")
+
+    def get_selected_ip(self) -> Optional[str]:
+        """Get the currently selected IP address."""
+        try:
+            if self.cursor_row is None:
+                self.app.query_one(ActivityLog).log_message("Please select an IP address first", "warning")
+                return None
+            return self.get_cell_at(Coordinate(self.cursor_row, 0))
+        except Exception:
+            return None
 
 class NetworkApp(App):
     """The main network monitoring application."""
