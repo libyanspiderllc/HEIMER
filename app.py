@@ -752,9 +752,10 @@ class ConnectionTable(DataTable):
         
         # Add rows to the table
         for i, row_data in enumerate(rows_data):
-            self.add_row(*row_data[:-1], key=str(i))
+            row = self.add_row(*row_data[:-1], key=str(i))
             if row_data[-1]:  # If has attacks
-                self.row_styles[str(i)] = "red"
+                for cell in self.get_row_at(i):
+                    cell.style = "color: red"
                 
         # Restore selection if possible
         if current_ip:
