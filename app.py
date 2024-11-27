@@ -719,10 +719,10 @@ class ConnectionTable(DataTable):
         else:
             return ""
         
-    def _refresh_table_display(self) -> None:
+    def _refresh_table_display(self, preserve_selection: bool = True) -> None:
         """Refresh the table display using current data without fetching new connections."""
         # Store current selection before clearing
-        current_ip = self.get_selected_ip()
+        current_ip = self.get_selected_ip() if preserve_selection else None
         
         self.clear()
         analyzer = AttackAnalyzer()
@@ -757,7 +757,7 @@ class ConnectionTable(DataTable):
                 for cell in self.get_row_at(i):
                     cell.style = "color: red"
                 
-        # Restore selection if possible
+        # Restore selection if possible and desired
         if current_ip:
             for i, row_data in enumerate(rows_data):
                 if row_data[0] == current_ip:
@@ -923,12 +923,12 @@ class ConnectionTable(DataTable):
             # If already sorting by this column, toggle direction
             self._sort_reverse = not self._sort_reverse
         else:
-            # New column, sort ascending
+            # If sorting by a new column, set it and default to ascending
             self._sort_column = column_index
             self._sort_reverse = False
             
-        # Update the table display only
-        self._refresh_table_display()
+        # Refresh without preserving selection for sort operations
+        self._refresh_table_display(preserve_selection=False)
         
         # Log the sort action
         direction = "descending" if self._sort_reverse else "ascending"
