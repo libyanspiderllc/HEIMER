@@ -20,6 +20,8 @@ from datetime import datetime, timedelta
 import urllib.request
 from urllib.error import URLError
 from html.parser import HTMLParser
+import netifaces
+import ipaddress
 
 if TYPE_CHECKING:
     from typing import Type
@@ -33,6 +35,225 @@ MONITORED_PORTS = ["80", "443"]
 MONITORED_STATES = ["ESTABLISHED", "TIME_WAIT", "SYN_RECV"]
 PORTS_DISPLAY = "/".join(MONITORED_PORTS)
 APACHE_STATUS_URL = "http://127.0.0.1/whm-server-status"
+
+def get_server_addresses():
+    """Get all IP addresses (IPv4 and IPv6) of the server."""
+    try:
+        server_ips = set()
+        
+        # Get all interfaces
+        for interface in netifaces.interfaces():
+            addrs = netifaces.ifaddresses(interface)
+            
+            # Get IPv4 addresses
+            if netifaces.AF_INET in addrs:
+                for addr in addrs[netifaces.AF_INET]:
+                    server_ips.add(addr['addr'])
+                    
+            # Get IPv6 addresses
+            if netifaces.AF_INET6 in addrs:
+                for addr in addrs[netifaces.AF_INET6]:
+                    # Remove scope id if present (e.g., %eth0)
+                    ip = addr['addr'].split('%')[0]
+                    server_ips.add(ip)
+        
+        return server_ips
+    except ImportError:
+        return set(['127.0.0.1', '::1'])  # Fallback to basic loopback addresses
+    except Exception:
+        return set(['127.0.0.1', '::1'])  # Fallback on any error
+
+# Initialize server addresses
+SERVER_ADDRESSES = get_server_addresses()
+
+# Test mode configuration
+TEST_MODE = False  # Set to False to use real netstat
+TEST_DATA_FILE = os.path.join(os.path.dirname(__file__), "test_data", "netstat_sample.txt")
+
+# Global state for CSF status
+ip_csf_status = {}
+
+def is_excluded_ip(ip: str) -> bool:
+    """Check if an IP should be excluded from monitoring."""
+    import ipaddress
+    
+    try:
+        ip_obj = ipaddress.ip_address(ip)
+        
+        # Check if it's a loopback address
+        if ip_obj.is_loopback:
+            return True
+            
+        # Check if it's one of our server addresses
+        if ip in SERVER_ADDRESSES:
+            return True
+            
+        return False
+    except ValueError:
+        return False  # If IP is invalid, don't exclude it
+
+def get_netstat_output():
+    """Get netstat output either from test file or real command."""
+    if TEST_MODE:
+        try:
+            with open(TEST_DATA_FILE, 'r') as f:
+                return f.read()
+        except FileNotFoundError:
+            return ""
+    
+    try:
+        cmd = ["netstat", "-tn"]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        return result.stdout
+    except subprocess.CalledProcessError:
+        return ""
+
+def get_connection_data():
+    """Fetch and aggregate network connection data."""
+    try:
+        output = get_netstat_output()
+        
+        # Initialize aggregation dictionary
+        connections = {}
+        
+        # Process each line
+        for line in output.splitlines():
+            if "tcp" not in line.lower():
+                continue
+                
+            parts = line.split()
+            if len(parts) < 6:
+                continue
+                
+            # Extract remote IP and local port
+            local_addr = parts[3]
+            remote_addr = parts[4]
+            
+            # Handle IPv4 (format: 192.168.1.1:80)
+            if "." in local_addr:
+                local_port = local_addr.split(":")[-1]
+                remote_ip = remote_addr.rsplit(":", 1)[0]  # Use rsplit to handle IPv4 port
+            # Handle IPv6 (format: 2a01:4f9:2b:1f2d::56508)
+            else:
+                try:
+                    local_port = local_addr.rsplit(":", 1)[1]  # Get port after last colon
+                    remote_ip = remote_addr.rsplit(":", 1)[0]  # Get IP without port
+                except (IndexError, ValueError):
+                    continue
+            
+            # Skip if it's a server address or loopback
+            if is_excluded_ip(remote_ip):
+                continue
+                
+            if local_port not in MONITORED_PORTS:
+                continue
+                
+            state = parts[5]
+            if state in MONITORED_STATES:
+                if remote_ip not in connections:
+                    connections[remote_ip] = {
+                        'ESTABLISHED': 0,
+                        'TIME_WAIT': 0,
+                        'SYN_RECV': 0,
+                        'csf_status': ''
+                    }
+                connections[remote_ip][state] += 1
+        
+        return connections
+    except subprocess.CalledProcessError as e:
+        return {}
+
+def format_block_time(until_time: datetime) -> str:
+    """Format block time in a human-readable format."""
+    now = datetime.now()
+    if until_time < now:
+        return "Block expired"
+    
+    time_str = until_time.strftime("%H:%M")
+    
+    # If it's tomorrow, add the day
+    if until_time.date() > now.date():
+        time_str = until_time.strftime("%b %d %H:%M")
+    
+    return f"Blocked until {time_str}"
+
+def check_csf(ip: str) -> str:
+    """Check if IP is in CSF."""
+    try:
+        result = subprocess.check_output(["csf", "-g", ip], text=True)
+        if "DENY" in result:
+            # Try to extract if it's temporary and when it expires
+            if "Temporary Block" in result:
+                for line in result.splitlines():
+                    if "expires at" in line.lower():
+                        try:
+                            # Extract and parse the expiry time
+                            time_str = line.split("expires at")[1].strip()
+                            expiry = datetime.strptime(time_str, "%a %b %d %H:%M:%S %Y")
+                            return format_block_time(expiry)
+                        except (ValueError, IndexError):
+                            pass
+                return "Temporarily blocked"
+            return "Permanently blocked"
+        return "Not blocked"
+    except subprocess.CalledProcessError:
+        return "Not blocked"
+    except FileNotFoundError:
+        return "CSF not installed"
+
+def block_in_csf(ip: str, is_temporary: bool = True, duration: int = 600) -> str:
+    """Block IP in CSF."""
+    global ip_csf_status
+    
+    if is_temporary:
+        cmd = ["csf", "-td", ip, str(duration)]
+        status = format_block_time(datetime.now() + timedelta(seconds=duration))
+    else:
+        cmd = ["csf", "-d", ip]
+        status = "Permanently blocked"
+        
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+        ip_csf_status[ip] = status
+        return "Success"
+    except subprocess.CalledProcessError as e:
+        return f"Error: {e.stderr}"
+    except FileNotFoundError:
+        return "CSF not installed"
+
+def perform_ptr_lookup(ip):
+    """Perform PTR lookup for an IP address."""
+    try:
+        return socket.gethostbyaddr(ip)[0]
+    except (socket.herror, socket.gaierror):
+        return "No PTR record found"
+
+def perform_whois_lookup(ip):
+    """Perform WHOIS lookup for an IP address."""
+    try:
+        result = subprocess.check_output(["whois", ip], text=True)
+        return result
+    except subprocess.CalledProcessError:
+        return "WHOIS lookup failed"
+
+def get_subnet(ip: str) -> str:
+    """Convert an IP address to its subnet with default mask (/24 for IPv4, /64 for IPv6)."""
+    try:
+        # Check if it's IPv6
+        if ":" in ip:
+            # Split the IPv6 address into segments
+            segments = ip.split(":")
+            # Take first 4 segments (64 bits) and pad with zeros
+            subnet = ":".join(segments[:4]) + "::" + "/64"
+            return subnet
+        else:
+            # For IPv4, take first 3 octets
+            segments = ip.split(".")
+            if len(segments) == 4:
+                return ".".join(segments[:3]) + ".0/24"
+            return ip + "/24"  # Fallback
+    except Exception:
+        return ip  # Return original IP if parsing fails
 
 class ApacheStatusParser(HTMLParser):
     """Parser for Apache server-status page."""
@@ -147,190 +368,6 @@ def get_apache_status(ip: str) -> List[Dict[str, str]]:
         return []
     except Exception as e:
         return []
-
-# Test mode configuration
-TEST_MODE = False  # Set to False to use real netstat
-TEST_DATA_FILE = os.path.join(os.path.dirname(__file__), "test_data", "netstat_sample.txt")
-
-# Global state for CSF status
-ip_csf_status = {}
-
-def get_netstat_output():
-    """Get netstat output either from test file or real command."""
-    if TEST_MODE:
-        try:
-            with open(TEST_DATA_FILE, 'r') as f:
-                return f.read()
-        except FileNotFoundError:
-            return ""
-    else:
-        try:
-            # Build netstat command with state filtering
-            state_filter = " || ".join(f"$6 ~ /^{state}$/" for state in MONITORED_STATES)
-            port_filter = " || ".join(f"$4 ~ /:{port}/" for port in MONITORED_PORTS)
-            cmd = f"netstat -ant | awk '({port_filter}) && ({state_filter})'"
-            return subprocess.check_output(cmd, shell=True, text=True)
-        except subprocess.CalledProcessError:
-            return ""
-
-def format_block_time(until_time: datetime) -> str:
-    """Format block time in a human-readable format."""
-    now = datetime.now()
-    if until_time < now:
-        return "Block expired"
-    
-    time_str = until_time.strftime("%H:%M")
-    
-    # If it's tomorrow, add the day
-    if until_time.date() > now.date():
-        time_str = until_time.strftime("%b %d %H:%M")
-    
-    return f"Blocked until {time_str}"
-
-def check_csf(ip: str) -> str:
-    """Check if IP is in CSF."""
-    try:
-        result = subprocess.check_output(["csf", "-g", ip], text=True)
-        if "DENY" in result:
-            # Try to extract if it's temporary and when it expires
-            if "Temporary Block" in result:
-                for line in result.splitlines():
-                    if "expires at" in line.lower():
-                        try:
-                            # Extract and parse the expiry time
-                            time_str = line.split("expires at")[1].strip()
-                            expiry = datetime.strptime(time_str, "%a %b %d %H:%M:%S %Y")
-                            return format_block_time(expiry)
-                        except (ValueError, IndexError):
-                            pass
-                return "Temporarily blocked"
-            return "Permanently blocked"
-        return "Not blocked"
-    except subprocess.CalledProcessError:
-        return "Not blocked"
-    except FileNotFoundError:
-        return "CSF not installed"
-
-def block_in_csf(ip: str, is_temporary: bool = True, duration: int = 600) -> str:
-    """Block IP in CSF."""
-    global ip_csf_status
-    
-    if is_temporary:
-        cmd = ["csf", "-td", ip, str(duration)]
-        status = format_block_time(datetime.now() + timedelta(seconds=duration))
-    else:
-        cmd = ["csf", "-d", ip]
-        status = "Permanently blocked"
-        
-    try:
-        subprocess.run(cmd, check=True, capture_output=True, text=True)
-        ip_csf_status[ip] = status
-        return "Success"
-    except subprocess.CalledProcessError as e:
-        return f"Error: {e.stderr}"
-    except FileNotFoundError:
-        return "CSF not installed"
-
-def get_connection_data():
-    """Fetch and aggregate network connection data."""
-    try:
-        output = get_netstat_output()
-        
-        # Initialize aggregation dictionary
-        connections = {}
-        
-        # Process each line
-        for line in output.splitlines():
-            if "tcp" not in line.lower():
-                continue
-                
-            parts = line.split()
-            if len(parts) < 6:
-                continue
-                
-            # Extract remote IP and local port
-            local_addr = parts[3]
-            remote_addr = parts[4]
-            
-            # Handle IPv4 (format: 192.168.1.1:80)
-            if "." in local_addr:
-                local_port = local_addr.split(":")[-1]
-                remote_ip = remote_addr.rsplit(":", 1)[0]  # Use rsplit to handle IPv4 port
-            # Handle IPv6 (format: 2a01:4f9:2b:1f2d::56508)
-            else:
-                try:
-                    local_port = local_addr.rsplit(":", 1)[1]  # Get port after last colon
-                    remote_ip = remote_addr.rsplit(":", 1)[0]  # Get IP without port
-                except (IndexError, ValueError):
-                    continue
-                
-            if local_port not in MONITORED_PORTS:
-                continue
-                
-            state = parts[5]
-            if state in MONITORED_STATES:
-                if remote_ip not in connections:
-                    connections[remote_ip] = {
-                        'ESTABLISHED': 0,
-                        'TIME_WAIT': 0,
-                        'SYN_RECV': 0,
-                        'csf_status': ip_csf_status.get(remote_ip, '')
-                    }
-                connections[remote_ip][state] += 1
-        
-        return connections
-    except subprocess.CalledProcessError as e:
-        return {}
-
-def format_connection_data(connections):
-    """Format connection data for table display."""
-    table_data = []
-    for remote_ip, ports in connections.items():
-        row = [
-            remote_ip,
-            ip_csf_status.get(remote_ip, "")  # Add CSF status column
-        ]
-        # Add counts for each monitored state
-        for state in MONITORED_STATES:
-            state_count = ports.get(state, 0)
-            row.append(state_count)
-        table_data.append(row)
-        
-    return table_data
-
-def perform_ptr_lookup(ip):
-    """Perform PTR lookup for an IP address."""
-    try:
-        return socket.gethostbyaddr(ip)[0]
-    except (socket.herror, socket.gaierror):
-        return "No PTR record found"
-
-def perform_whois_lookup(ip):
-    """Perform WHOIS lookup for an IP address."""
-    try:
-        result = subprocess.check_output(["whois", ip], text=True)
-        return result
-    except subprocess.CalledProcessError:
-        return "WHOIS lookup failed"
-
-def get_subnet(ip: str) -> str:
-    """Convert an IP address to its subnet with default mask (/24 for IPv4, /64 for IPv6)."""
-    try:
-        # Check if it's IPv6
-        if ":" in ip:
-            # Split the IPv6 address into segments
-            segments = ip.split(":")
-            # Take first 4 segments (64 bits) and pad with zeros
-            subnet = ":".join(segments[:4]) + "::" + "/64"
-            return subnet
-        else:
-            # For IPv4, take first 3 octets
-            segments = ip.split(".")
-            if len(segments) == 4:
-                return ".".join(segments[:3]) + ".0/24"
-            return ip + "/24"  # Fallback
-    except Exception:
-        return ip  # Return original IP if parsing fails
 
 class TitleBox(Static):
     """Title and welcome message widget."""
