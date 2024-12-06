@@ -67,7 +67,7 @@ def get_server_addresses():
 SERVER_ADDRESSES = get_server_addresses()
 
 # Test mode configuration
-TEST_MODE = False  # Set to False to use real netstat
+TEST_MODE = True  # Set to False to use real netstat
 TEST_DATA_FILE = os.path.join(os.path.dirname(__file__), "test_data", "netstat_sample.txt")
 
 # Global state for CSF status
@@ -850,6 +850,8 @@ class ConnectionTable(DataTable):
         log = self.app.query_one(ActivityLog)
         log.log_message(f"Blocking {ip} temporarily...", "warning")
         result = await self.run_in_thread(block_in_csf, ip, True)
+        if ip in self._raw_data:
+            self._raw_data[ip]['csf_status'] = result
         log.log_message(f"Temporary block for {ip}: {result}", "success")
         self._refresh_table_display()
 
@@ -880,6 +882,8 @@ class ConnectionTable(DataTable):
         log = self.app.query_one(ActivityLog)
         log.log_message(f"Blocking {ip} permanently...", "warning")
         result = await self.run_in_thread(block_in_csf, ip, False)
+        if ip in self._raw_data:
+            self._raw_data[ip]['csf_status'] = result
         log.log_message(f"Permanent block for {ip}: {result}", "success")
         self._refresh_table_display()
 
