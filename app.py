@@ -663,9 +663,9 @@ class AttackAnalyzer:
     """Analyzes connection patterns to detect potential attacks."""
     
     def __init__(self):
-        self.SYN_ATTACK_THRESHOLD = 100
-        self.CONN_LIMIT_THRESHOLD = 100
-        self.HTTP_EXHAUSTION_THRESHOLD = 100
+        self.SYN_ATTACK_THRESHOLD = 30
+        self.CONN_LIMIT_THRESHOLD = 30
+        self.HTTP_EXHAUSTION_THRESHOLD = 10
         
     def analyze_connections(self, connections: dict, apache_connections: List[Dict[str, str]] = None) -> Dict[str, List[str]]:
         """
@@ -696,9 +696,9 @@ class AttackAnalyzer:
                 vhosts = wp_connections[ip]
                 total_wp_requests = sum(vhosts.values())
                 
-                if len(vhosts) > 1 and total_wp_requests > 10:
+                if len(vhosts) > 1 and total_wp_requests > 5:
                     results[ip].append("WP Distributed BruteForce")
-                elif len(vhosts) == 1 and total_wp_requests > 20:
+                elif len(vhosts) == 1 and total_wp_requests > 10:
                     results[ip].append("WP Directed BruteForce")
             
             # HTTP Exhaustion Attack Detection
