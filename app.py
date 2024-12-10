@@ -67,7 +67,7 @@ def get_server_addresses():
 SERVER_ADDRESSES = get_server_addresses()
 
 # Test mode configuration
-TEST_MODE = True  # Set to False to use real netstat
+TEST_MODE = False  # Set to False to use real netstat
 TEST_DATA_FILE = os.path.join(os.path.dirname(__file__), "test_data", "netstat_sample.txt")
 
 # Global state for CSF status
@@ -762,8 +762,8 @@ class ConnectionTable(DataTable):
         current_ip = self.get_selected_ip() if preserve_selection else None
         
         self.clear()
-        analyzer = AttackAnalyzer()
-        attack_results = analyzer.analyze_connections(self._raw_data)
+        # analyzer = AttackAnalyzer()
+        # attack_results = analyzer.analyze_connections(self._raw_data)
         
         # Format the data for display
         rows_data = []
@@ -772,7 +772,8 @@ class ConnectionTable(DataTable):
             established = str(data.get('ESTABLISHED', 0))
             time_wait = str(data.get('TIME_WAIT', 0))
             syn_recv = str(data.get('SYN_RECV', 0))
-            attacks = attack_results.get(ip, [])
+            # attacks = attack_results.get(ip, [])
+            attacks = False
             attack_text = ", ".join(attacks) if attacks else ""
             
             rows_data.append((ip, csf_status, established, time_wait, syn_recv, attack_text, bool(attacks)))
@@ -850,8 +851,9 @@ class ConnectionTable(DataTable):
         log = self.app.query_one(ActivityLog)
         log.log_message(f"Blocking {ip} temporarily...", "warning")
         result = await self.run_in_thread(block_in_csf, ip, True)
+        csf_status = await self.run_in_thread(check_csf, ip)
         if ip in self._raw_data:
-            self._raw_data[ip]['csf_status'] = result
+            self._raw_data[ip]['csf_status'] = csf_status
         log.log_message(f"Temporary block for {ip}: {result}", "success")
         self._refresh_table_display()
 
@@ -882,8 +884,9 @@ class ConnectionTable(DataTable):
         log = self.app.query_one(ActivityLog)
         log.log_message(f"Blocking {ip} permanently...", "warning")
         result = await self.run_in_thread(block_in_csf, ip, False)
+        csf_status = await self.run_in_thread(check_csf, ip)
         if ip in self._raw_data:
-            self._raw_data[ip]['csf_status'] = result
+            self._raw_data[ip]['csf_status'] = csf_status
         log.log_message(f"Permanent block for {ip}: {result}", "success")
         self._refresh_table_display()
 
@@ -946,7 +949,9 @@ class ConnectionTable(DataTable):
                 if attacks:
                     attack_count += 1
                     log.log_message(f"Potential attacks detected from {ip}: {', '.join(attacks)}", "warning")
-            
+                    if ip in self._raw_data:
+                        self._raw_data[ip]['attack_text'] = ', '.join(attacks)
+                        self._raw_data[ip]['attacks'] = True
             if attack_count == 0:
                 log.log_message("No attacks detected in current connections", "success")
             else:
