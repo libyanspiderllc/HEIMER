@@ -1,4 +1,7 @@
-- Exclude loopback addresses from Remote IPs
-- Add correlation with Apache status page
-- Add attack type detection
-- Exclude server own IP from Remote IPs
+- [x] Exclude loopback addresses from Remote IPs
+- [x] Add correlation with Apache status page
+- [x] Add attack type detection
+- [x] Exclude server own IP from Remote IPs
+- [ ] Add widget to show CPU load: 1m, 5m, 15m
+- [ ] Default sort order by time_wait connections
+- [ ] Add CSF cluster block
