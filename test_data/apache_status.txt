@@ -1,0 +1,271 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<html><head>
+<title>Apache Status</title>
+</head><body>
+<h1>Apache Server Status for 127.0.0.1 (via 127.0.0.1)</h1>
+
+<dl><dt>Server Version: Apache/2.4.62 (cPanel) OpenSSL/1.1.1k mod_bwlimited/1.4 Phusion_Passenger/6.0.23</dt>
+<dt>Server MPM: prefork</dt>
+<dt>Server Built: Jul 22 2024 15:33:24
+</dt></dl><hr /><dl>
+<dt>Current Time: Tuesday, 26-Nov-2024 13:21:59 EET</dt>
+<dt>Restart Time: Friday, 22-Nov-2024 10:17:20 EET</dt>
+<dt>Parent Server Config. Generation: 59</dt>
+<dt>Parent Server MPM Generation: 58</dt>
+<dt>Server uptime:  4 days 3 hours 4 minutes 38 seconds</dt>
+<dt>Server load: 0.07 0.15 0.17</dt>
+<dt>Total accesses: 108014 - Total Traffic: 546.1 MB - Total Duration: 3884651</dt>
+<dt>CPU Usage: u16.44 s11.44 cu380.44 cs96.84 - .142% CPU load</dt>
+<dt>.303 requests/sec - 1605 B/second - 5.2 kB/request - 35.9643 ms/request</dt>
+<dt>1 requests currently being processed, 0 workers gracefully restarting, 5 idle workers</dt>
+</dl><pre>____W._.........................................................
+................................................................
+......................</pre>
+<p>Scoreboard Key:<br />
+"<b><code>_</code></b>" Waiting for Connection, 
+"<b><code>S</code></b>" Starting up, 
+"<b><code>R</code></b>" Reading Request,<br />
+"<b><code>W</code></b>" Sending Reply, 
+"<b><code>K</code></b>" Keepalive (read), 
+"<b><code>D</code></b>" DNS Lookup,<br />
+"<b><code>C</code></b>" Closing connection, 
+"<b><code>L</code></b>" Logging, 
+"<b><code>G</code></b>" Gracefully finishing,<br /> 
+"<b><code>I</code></b>" Idle cleanup of worker, 
+"<b><code>.</code></b>" Open slot with no current process<br />
+</p>
+
+
+<table border="0"><tr><th>Srv</th><th>PID</th><th>Acc</th><th>M</th><th>CPU
+</th><th>SS</th><th>Req</th><th>Dur</th><th>Conn</th><th>Child</th><th>Slot</th><th>Client</th><th>Protocol</th><th>VHost</th><th>Request</th></tr>
+
+<tr><td><b>0-58</b></td><td>2094243</td><td>0/329/14250</td><td>_
+</td><td>1.41</td><td>0</td><td>1</td><td>345125</td><td>0.0</td><td>1.60</td><td>72.46
+</td><td>102.213.180.130</td><td>http/1.1</td><td nowrap>lsx.server.ly:443</td><td nowrap>GET / HTTP/1.1</td></tr>
+
+<tr><td><b>1-58</b></td><td>2094287</td><td>0/278/14474</td><td>_
+</td><td>1.18</td><td>0</td><td>1</td><td>371511</td><td>0.0</td><td>1.36</td><td>72.34
+</td><td>102.213.180.130</td><td>http/1.1</td><td nowrap>lsx.server.ly:443</td><td nowrap>GET / HTTP/1.1</td></tr>
+
+<tr><td><b>2-58</b></td><td>2094247</td><td>0/330/14433</td><td>_
+</td><td>1.43</td><td>0</td><td>1</td><td>332417</td><td>0.0</td><td>1.61</td><td>73.45
+</td><td>102.213.180.130</td><td>http/1.1</td><td nowrap>lsx.server.ly:443</td><td nowrap>GET / HTTP/1.1</td></tr>
+
+<tr><td><b>3-58</b></td><td>2094245</td><td>0/331/14395</td><td>_
+</td><td>1.44</td><td>0</td><td>1</td><td>314620</td><td>0.0</td><td>1.61</td><td>72.81
+</td><td>102.213.180.130</td><td>http/1.1</td><td nowrap>lsx.server.ly:443</td><td nowrap>GET / HTTP/1.1</td></tr>
+
+<tr><td><b>4-58</b></td><td>2094246</td><td>0/330/14364</td><td><b>W</b>
+</td><td>1.40</td><td>0</td><td>0</td><td>360940</td><td>0.0</td><td>1.61</td><td>72.15
+</td><td>127.0.0.1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>GET /whm-server-status HTTP/1.1</td></tr>
+
+<tr><td><b>5-57</b></td><td>-</td><td>0/0/7983</td><td>.
+</td><td>0.00</td><td>45</td><td>1</td><td>399093</td><td>0.0</td><td>0.00</td><td>42.37
+</td><td>102.213.180.130</td><td>http/1.1</td><td nowrap>lsx.server.ly:443</td><td nowrap>GET / HTTP/1.1</td></tr>
+
+<tr><td><b>6-58</b></td><td>2094244</td><td>0/331/14209</td><td>_
+</td><td>1.41</td><td>0</td><td>1</td><td>412083</td><td>0.0</td><td>1.61</td><td>71.09
+</td><td>102.213.180.130</td><td>http/1.1</td><td nowrap>lsx.server.ly:443</td><td nowrap>GET / HTTP/1.1</td></tr>
+
+<tr><td><b>7-57</b></td><td>-</td><td>0/0/7571</td><td>.
+</td><td>0.00</td><td>45</td><td>1</td><td>247872</td><td>0.0</td><td>0.00</td><td>37.74
+</td><td>102.213.180.130</td><td>http/1.1</td><td nowrap>lsx.server.ly:443</td><td nowrap>GET / HTTP/1.1</td></tr>
+
+<tr><td><b>8-56</b></td><td>-</td><td>0/0/1202</td><td>.
+</td><td>0.00</td><td>2375</td><td>0</td><td>238418</td><td>0.0</td><td>0.00</td><td>7.69
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+<tr><td><b>9-56</b></td><td>-</td><td>0/0/1926</td><td>.
+</td><td>0.00</td><td>566</td><td>1</td><td>28071</td><td>0.0</td><td>0.00</td><td>10.03
+</td><td>102.213.180.130</td><td>http/1.1</td><td nowrap>lsx.server.ly:443</td><td nowrap>GET / HTTP/1.1</td></tr>
+
+<tr><td><b>10-56</b></td><td>-</td><td>0/0/2061</td><td>.
+</td><td>0.00</td><td>566</td><td>1</td><td>204342</td><td>0.0</td><td>0.00</td><td>11.48
+</td><td>102.213.180.130</td><td>http/1.1</td><td nowrap></td><td nowrap></td></tr>
+
+<tr><td><b>11-56</b></td><td>-</td><td>0/0/199</td><td>.
+</td><td>0.00</td><td>2374</td><td>0</td><td>113016</td><td>0.0</td><td>0.00</td><td>0.62
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+<tr><td><b>12-52</b></td><td>-</td><td>0/0/110</td><td>.
+</td><td>0.00</td><td>32522</td><td>0</td><td>61725</td><td>0.0</td><td>0.00</td><td>0.16
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+<tr><td><b>13-52</b></td><td>-</td><td>0/0/70</td><td>.
+</td><td>0.00</td><td>29606</td><td>1</td><td>1483</td><td>0.0</td><td>0.00</td><td>0.31
+</td><td>141.98.11.48</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>GET /cgi-bin/luci/;stok=/locale HTTP/1.1</td></tr>
+
+<tr><td><b>14-19</b></td><td>-</td><td>0/0/5</td><td>.
+</td><td>0.00</td><td>241033</td><td>0</td><td>9</td><td>0.0</td><td>0.00</td><td>0.01
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+<tr><td><b>15-19</b></td><td>-</td><td>0/0/167</td><td>.
+</td><td>0.00</td><td>237944</td><td>1</td><td>112368</td><td>0.0</td><td>0.00</td><td>0.28
+</td><td>127.0.0.1</td><td>http/1.1</td><td nowrap></td><td nowrap></td></tr>
+
+<tr><td><b>16-19</b></td><td>-</td><td>0/0/169</td><td>.
+</td><td>0.00</td><td>237944</td><td>1</td><td>116040</td><td>0.0</td><td>0.00</td><td>0.36
+</td><td>127.0.0.1</td><td>http/1.1</td><td nowrap></td><td nowrap></td></tr>
+
+<tr><td><b>17-19</b></td><td>-</td><td>0/0/167</td><td>.
+</td><td>0.00</td><td>237944</td><td>1</td><td>112556</td><td>0.0</td><td>0.00</td><td>0.27
+</td><td>127.0.0.1</td><td>http/1.1</td><td nowrap></td><td nowrap></td></tr>
+
+<tr><td><b>18-19</b></td><td>-</td><td>0/0/3</td><td>.
+</td><td>0.00</td><td>241071</td><td>0</td><td>7</td><td>0.0</td><td>0.00</td><td>0.01
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+<tr><td><b>19-19</b></td><td>-</td><td>0/0/4</td><td>.
+</td><td>0.00</td><td>241037</td><td>0</td><td>5</td><td>0.0</td><td>0.00</td><td>0.01
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+<tr><td><b>20-19</b></td><td>-</td><td>0/0/3</td><td>.
+</td><td>0.00</td><td>241069</td><td>0</td><td>6</td><td>0.0</td><td>0.00</td><td>0.01
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+<tr><td><b>21-19</b></td><td>-</td><td>0/0/3</td><td>.
+</td><td>0.00</td><td>241068</td><td>0</td><td>5</td><td>0.0</td><td>0.00</td><td>0.01
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+<tr><td><b>22-19</b></td><td>-</td><td>0/0/3</td><td>.
+</td><td>0.00</td><td>241064</td><td>0</td><td>7</td><td>0.0</td><td>0.00</td><td>0.01
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+<tr><td><b>23-19</b></td><td>-</td><td>0/0/3</td><td>.
+</td><td>0.00</td><td>241063</td><td>0</td><td>5</td><td>0.0</td><td>0.00</td><td>0.01
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+<tr><td><b>24-19</b></td><td>-</td><td>0/0/3</td><td>.
+</td><td>0.00</td><td>241062</td><td>0</td><td>6</td><td>0.0</td><td>0.00</td><td>0.01
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+<tr><td><b>25-19</b></td><td>-</td><td>0/0/3</td><td>.
+</td><td>0.00</td><td>241061</td><td>0</td><td>5</td><td>0.0</td><td>0.00</td><td>0.01
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+<tr><td><b>26-19</b></td><td>-</td><td>0/0/3</td><td>.
+</td><td>0.00</td><td>241060</td><td>0</td><td>5</td><td>0.0</td><td>0.00</td><td>0.01
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+<tr><td><b>27-19</b></td><td>-</td><td>0/0/3</td><td>.
+</td><td>0.00</td><td>241059</td><td>0</td><td>6</td><td>0.0</td><td>0.00</td><td>0.01
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+<tr><td><b>28-19</b></td><td>-</td><td>0/0/3</td><td>.
+</td><td>0.00</td><td>241058</td><td>0</td><td>5</td><td>0.0</td><td>0.00</td><td>0.01
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+<tr><td><b>29-19</b></td><td>-</td><td>0/0/3</td><td>.
+</td><td>0.00</td><td>241057</td><td>0</td><td>6</td><td>0.0</td><td>0.00</td><td>0.01
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+<tr><td><b>30-19</b></td><td>-</td><td>0/0/3</td><td>.
+</td><td>0.00</td><td>241047</td><td>0</td><td>6</td><td>0.0</td><td>0.00</td><td>0.01
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+<tr><td><b>31-19</b></td><td>-</td><td>0/0/3</td><td>.
+</td><td>0.00</td><td>241046</td><td>0</td><td>6</td><td>0.0</td><td>0.00</td><td>0.01
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+<tr><td><b>32-19</b></td><td>-</td><td>0/0/3</td><td>.
+</td><td>0.00</td><td>241045</td><td>0</td><td>6</td><td>0.0</td><td>0.00</td><td>0.01
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+<tr><td><b>33-19</b></td><td>-</td><td>0/0/166</td><td>.
+</td><td>0.00</td><td>237944</td><td>0</td><td>112763</td><td>0.0</td><td>0.00</td><td>0.27
+</td><td>127.0.0.1</td><td>http/1.1</td><td nowrap></td><td nowrap></td></tr>
+
+<tr><td><b>34-19</b></td><td>-</td><td>0/0/3</td><td>.
+</td><td>0.00</td><td>241044</td><td>0</td><td>5</td><td>0.0</td><td>0.00</td><td>0.01
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+<tr><td><b>35-19</b></td><td>-</td><td>0/0/3</td><td>.
+</td><td>0.00</td><td>241043</td><td>0</td><td>6</td><td>0.0</td><td>0.00</td><td>0.01
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+<tr><td><b>36-19</b></td><td>-</td><td>0/0/3</td><td>.
+</td><td>0.00</td><td>241042</td><td>0</td><td>6</td><td>0.0</td><td>0.00</td><td>0.01
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+<tr><td><b>37-19</b></td><td>-</td><td>0/0/3</td><td>.
+</td><td>0.00</td><td>241041</td><td>0</td><td>6</td><td>0.0</td><td>0.00</td><td>0.01
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+<tr><td><b>38-19</b></td><td>-</td><td>0/0/3</td><td>.
+</td><td>0.00</td><td>241040</td><td>0</td><td>6</td><td>0.0</td><td>0.00</td><td>0.01
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+<tr><td><b>39-19</b></td><td>-</td><td>0/0/3</td><td>.
+</td><td>0.00</td><td>241072</td><td>0</td><td>4</td><td>0.0</td><td>0.00</td><td>0.00
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+<tr><td><b>40-19</b></td><td>-</td><td>0/0/3</td><td>.
+</td><td>0.00</td><td>241039</td><td>0</td><td>6</td><td>0.0</td><td>0.00</td><td>0.01
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+<tr><td><b>41-19</b></td><td>-</td><td>0/0/3</td><td>.
+</td><td>0.00</td><td>241038</td><td>0</td><td>5</td><td>0.0</td><td>0.00</td><td>0.01
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+<tr><td><b>42-19</b></td><td>-</td><td>0/0/2</td><td>.
+</td><td>0.00</td><td>241070</td><td>1</td><td>5</td><td>0.0</td><td>0.00</td><td>0.01
+</td><td>109.237.27.11</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>GET /db/webdb/index.php?lang=en HTTP/1.1</td></tr>
+
+<tr><td><b>43-19</b></td><td>-</td><td>0/0/3</td><td>.
+</td><td>0.00</td><td>241036</td><td>0</td><td>5</td><td>0.0</td><td>0.00</td><td>0.01
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+<tr><td><b>44-19</b></td><td>-</td><td>0/0/3</td><td>.
+</td><td>0.00</td><td>241035</td><td>0</td><td>6</td><td>0.0</td><td>0.00</td><td>0.01
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+<tr><td><b>45-19</b></td><td>-</td><td>0/0/3</td><td>.
+</td><td>0.00</td><td>241034</td><td>0</td><td>6</td><td>0.0</td><td>0.00</td><td>0.01
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+<tr><td><b>46-19</b></td><td>-</td><td>0/0/2</td><td>.
+</td><td>0.00</td><td>241066</td><td>0</td><td>4</td><td>0.0</td><td>0.00</td><td>0.00
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+<tr><td><b>47-19</b></td><td>-</td><td>0/0/2</td><td>.
+</td><td>0.00</td><td>241065</td><td>0</td><td>3</td><td>0.0</td><td>0.00</td><td>0.00
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+<tr><td><b>48-19</b></td><td>-</td><td>0/0/2</td><td>.
+</td><td>0.00</td><td>241053</td><td>0</td><td>3</td><td>0.0</td><td>0.00</td><td>0.00
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+<tr><td><b>49-19</b></td><td>-</td><td>0/0/2</td><td>.
+</td><td>0.00</td><td>241052</td><td>0</td><td>4</td><td>0.0</td><td>0.00</td><td>0.00
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+<tr><td><b>50-19</b></td><td>-</td><td>0/0/2</td><td>.
+</td><td>0.00</td><td>241051</td><td>0</td><td>3</td><td>0.0</td><td>0.00</td><td>0.00
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+<tr><td><b>51-19</b></td><td>-</td><td>0/0/2</td><td>.
+</td><td>0.00</td><td>241050</td><td>0</td><td>3</td><td>0.0</td><td>0.00</td><td>0.00
+</td><td>::1</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>OPTIONS * HTTP/1.0</td></tr>
+
+</table>
+ <hr /> <table>
+ <tr><th>Srv</th><td>Child Server number - generation</td></tr>
+ <tr><th>PID</th><td>OS process ID</td></tr>
+ <tr><th>Acc</th><td>Number of accesses this connection / this child / this slot</td></tr>
+ <tr><th>M</th><td>Mode of operation</td></tr>
+<tr><th>CPU</th><td>CPU usage, number of seconds</td></tr>
+<tr><th>SS</th><td>Seconds since beginning of most recent request</td></tr>
+ <tr><th>Req</th><td>Milliseconds required to process most recent request</td></tr>
+ <tr><th>Dur</th><td>Sum of milliseconds required to process all requests</td></tr>
+ <tr><th>Conn</th><td>Kilobytes transferred this connection</td></tr>
+ <tr><th>Child</th><td>Megabytes transferred this child</td></tr>
+ <tr><th>Slot</th><td>Total megabytes transferred this slot</td></tr>
+ </table>
+<hr>
+<table cellspacing=0 cellpadding=0>
+<tr><td bgcolor="#000000">
+</td></tr>olor="#ffffff" face="Arial,Helvetica">SSL/TLS Session Cache Status:</font></b>
+<tr><td bgcolor="#ffffff">
+cache type: <b>SHMCB</b>, shared memory: <b>1024000</b> bytes, current entries: <b>3826</b><br>subcaches: <b>32</b>, indexes per subcache: <b>177</b><br>time left on oldest entries' objects: avg: <b>255</b> seconds, (range: 254...257)<br>index usage: <b>67%</b>, cache usage: <b>93%</b><br>total entries stored since starting: <b>3858</b><br>total entries replaced since starting: <b>0</b><br>total entries expired since starting: <b>0</b><br>total (pre-expiry) entries scrolled out of the cache: <b>32</b><br>total retrieves since starting: <b>0</b> hit, <b>0</b> miss<br>total removes since starting: <b>0</b> hit, <b>0</b> miss<br></td></tr>
+</table>
+</body></html>

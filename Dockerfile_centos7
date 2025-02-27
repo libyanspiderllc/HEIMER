@@ -1,17 +1,21 @@
-FROM almalinux:8
+FROM centos/python-38-centos7
 
 # Install system dependencies
-RUN dnf install -y \
+USER 0
+RUN sed -i.bak 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-* && \
+    sed -i.bak 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
+    
+RUN yum --disablerepo=centos-sclo-sclo install -y \
     python38 \
     python38-devel \
     zlib \
     zlib-devel \
     gcc \
     make \
-    && dnf clean all
+    && yum clean all
 
 # Set Python 3.8 as default
-RUN alternatives --set python3 /usr/bin/python3.8
+#RUN alternatives --set python3 /usr/bin/python3.8
 
 WORKDIR /app
 
@@ -19,8 +23,7 @@ WORKDIR /app
 COPY requirements.txt .
 
 # Install dependencies directly with python
-RUN python3 -m venv /app/venv && \
-    /app/venv/bin/pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 #    /app/venv/bin/pip install --no-cache-dir "textual>=0.32.0,<0.33.0" && \
 #    /app/venv/bin/python -m pip install --no-cache-dir "pyinstaller>=5.13.0,<6.0.0"
 
@@ -28,7 +31,7 @@ RUN python3 -m venv /app/venv && \
 COPY . .
 
 # Build the binary using python -m
-RUN /app/venv/bin/python -m PyInstaller build.spec --clean
+RUN python3 -m PyInstaller build.spec --clean
 
 # Create artifacts directory with correct permissions
 RUN mkdir -p /artifacts && \

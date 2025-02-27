@@ -14,3 +14,4 @@ docker rm $container_id
 
 echo "Build complete! Binary is available at: dist/heimer"
 echo "You can now run it with: ./dist/heimer"
+
