@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from textual.app import App, ComposeResult
+from textual.app import App, ComposeResult, SystemCommand
 from textual.containers import Container, Horizontal, VerticalScroll, Center
 from textual.widgets import Header, Footer, Static, DataTable, Button, Label
 from textual.widgets.data_table import ColumnKey
@@ -8,6 +8,8 @@ from textual import events
 from textual.binding import Binding
 from textual.screen import ModalScreen
 from textual.css.query import NoMatches
+from textual.screen import Screen
+from typing import Iterable
 from rich.text import Text
 from rich.syntax import Syntax
 import subprocess
@@ -436,7 +438,7 @@ class WhoisScreen(ModalScreen[None]):
     def __init__(self, ip: str, connections: List[Dict[str, str]], connection_table: 'ConnectionTable'):
         super().__init__()
         self.ip = ip
-        self.connections = connections
+        self.whois_data = connections
         self.refresh_message = Static("", id="refresh-message")
         self.connection_table = connection_table
         
@@ -740,16 +742,17 @@ class ConnectionTable(DataTable):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.current_data = []
-        self.sorted_column = None
-        self.sort_reverse = False
+        # self.sorted_column = None
+        self._sort_column = None
+        self._sort_reverse = False
 
-    def on_mount(self) -> None:
-        """Set up the data table."""
-        self.cursor_type = "row"
-        self.selected_row_index = None
-        self._sort_column = 0  # Track current sort column
-        self._sort_reverse = False  # Track sort direction
-        self._raw_data = {}  # Store raw connection data
+    # def on_mount(self) -> None:
+    #     """Set up the data table."""
+    #     self.cursor_type = "row"
+    #     self.selected_row_index = None
+    #     self._sort_column = 0  # Track current sort column
+    #     self._sort_reverse = False  # Track sort direction
+    #     self._raw_data = {}  # Store raw connection data
         
     def update_data(self):
         """Update table with fresh connection data."""
@@ -837,7 +840,7 @@ class ConnectionTable(DataTable):
         if ip:
             self.app.query_one(ActivityLog).log_message(f"Fetching WHOIS information for {ip}...", "info")
             result = await self.run_in_thread(perform_whois_lookup, ip)
-            self.app.push_screen(WhoisScreen(ip, result))
+            self.app.push_screen(WhoisScreen(ip, result, self))
 
     async def action_csf_check(self) -> None:
         """Check if IP is in CSF."""
@@ -999,6 +1002,12 @@ class ConnectionTable(DataTable):
         
     def on_mount(self) -> None:
         """Set up the table columns."""
+        """Set up the data table."""
+        self.cursor_type = "row"
+        self.selected_row_index = None
+        self._sort_column = 3  # Track current sort column, default to TIME_WAIT
+        self._sort_reverse = True  # Track sort direction, default to descending
+        self._raw_data = {}  # Store raw connection data
         self.add_columns(
             "IP Address",
             "CSF Status",
@@ -1013,13 +1022,13 @@ class ConnectionTable(DataTable):
         """Handle row selection."""
         self.selected_row_index = event.cursor_row
         ip = self.get_row_at(event.cursor_row)[0]
-        self.app.query_one(ActivityLog).log_message(f"Selected IP: {ip}", "info")
+        #self.app.query_one(ActivityLog).log_message(f"Selected IP: {ip}", "info")
 
     def on_data_table_row_highlighted(self, event) -> None:
         """Handle row highlight from keyboard navigation."""
         self.selected_row_index = event.cursor_row
         ip = self.get_row_at(event.cursor_row)[0]
-        self.app.query_one(ActivityLog).log_message(f"Selected IP: {ip}", "info")
+        #self.app.query_one(ActivityLog).log_message(f"Selected IP: {ip}", "info")
 
     def get_selected_ip(self) -> Optional[str]:
         """Get the currently selected IP address."""
@@ -1033,7 +1042,8 @@ class ConnectionTable(DataTable):
 
 class NetworkApp(App):
     """The main network monitoring application."""
-    
+    # ENABLE_COMMAND_PALETTE = True
+    # COMMANDS = App.COMMANDS
     CSS = """
     Screen {
         align: center middle;
@@ -1061,6 +1071,10 @@ class NetworkApp(App):
         ("q", "quit", "Quit"),
     ]
     
+    def get_system_commands(self, screen: Screen) -> Iterable[SystemCommand]:
+        yield from super().get_system_commands(screen)  
+        yield SystemCommand("Bell", "Ring the bell", self.bell)  
+
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
         yield Header()
