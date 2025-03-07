@@ -9,6 +9,7 @@ from textual.binding import Binding
 from textual.screen import ModalScreen
 from textual.css.query import NoMatches
 from textual.screen import Screen
+from textual.containers import Container
 from typing import Iterable
 from rich.text import Text
 from rich.syntax import Syntax
@@ -59,7 +60,8 @@ def get_server_addresses():
                     # Remove scope id if present (e.g., %eth0)
                     ip = addr['addr'].split('%')[0]
                     server_ips.add(ip)
-        
+                    # Add the IP again removing the last 2 characters, e.g. :2 (WORKAROUND)
+                    server_ips.add(ip[:-2])
         return server_ips
     except ImportError:
         return set(['127.0.0.1', '::1'])  # Fallback to basic loopback addresses
@@ -88,6 +90,8 @@ def is_excluded_ip(ip: str) -> bool:
             return True
             
         # Check if it's one of our server addresses
+        # Sometimes our IP is like 2a01:4f9:2b:1f2d::2
+        # But the remote address is like 2a01:4f9:2b:1f2d:
         if ip in SERVER_ADDRESSES:
             return True
             
@@ -204,16 +208,24 @@ def check_csf(ip: str) -> str:
     except FileNotFoundError:
         return "CSF not installed"
 
-def block_in_csf(ip: str, is_temporary: bool = True, duration: int = 600) -> str:
+def block_in_csf(ip: str, is_temporary: bool = True, duration: int = 600, cluster: bool = False) -> str:
     """Block IP in CSF."""
     global ip_csf_status
     
-    if is_temporary:
-        cmd = ["csf", "-td", ip, str(duration)]
-        status = format_block_time(datetime.now() + timedelta(seconds=duration))
+    if cluster:
+        if is_temporary:
+            cmd = ["csf", "-ctd", ip, str(duration)]
+            status = format_block_time(datetime.now() + timedelta(seconds=duration))
+        else:
+            cmd = ["csf", "-cd", ip]
+            status = "Cluster Permanently blocked"
     else:
-        cmd = ["csf", "-d", ip]
-        status = "Permanently blocked"
+        if is_temporary:
+            cmd = ["csf", "-td", ip, str(duration)]
+            status = format_block_time(datetime.now() + timedelta(seconds=duration))
+        else:
+            cmd = ["csf", "-d", ip]
+            status = "Permanently blocked"
         
     try:
         subprocess.run(cmd, check=True, capture_output=True, text=True)
@@ -724,19 +736,23 @@ class ConnectionTable(DataTable):
     """A custom DataTable for displaying network connections."""
 
     BINDINGS = [
-        Binding("p", "ptr_lookup", "PTR Lookup", show=True),
+        Binding("p", "ptr_lookup", "PTR", show=True),
         Binding("w", "whois_lookup", "WHOIS", show=True),
         Binding("c", "csf_check", "CSF Check", show=True),
-        Binding("t", "block_temp", "Temp Block IP", show=True),
-        Binding("s", "block_subnet", "Temp Block Subnet", show=True),
-        Binding("b", "block_perm", "Perm Block IP", show=True),
         Binding("a", "apache_status", "Apache Status", show=True),
+        Binding("t", "block_temp", "Temp Block", show=True),
+        Binding("y", "cluster_block_temp", "Cluster Temp Block", show=True),
+        Binding("b", "block_perm", "Perm Block", show=True),
+        Binding("z", "cluster_block_perm", "Cluster Perm Block", show=True),        
+        Binding("s", "block_subnet", "Temp Block Subnet", show=True),
+        Binding("n", "cluster_block_subnet", "Cluster Temp Block Subnet", show=True),
+        # Binding("v", "cluser_csf_check", "Cluster CSF Check", show=True),
         Binding("x", "analyze_attacks", "Analyze Attacks", show=True),
-        Binding("1", "sort(0)", "Sort by IP", show=True),
-        Binding("2", "sort(1)", "Sort by CSF Status", show=True),
-        Binding("3", "sort(2)", "Sort by Established", show=True),
-        Binding("4", "sort(3)", "Sort by Time Wait", show=True),
-        Binding("5", "sort(4)", "Sort by SYN Recv", show=True),
+        Binding("1", "sort(0)", "Sort by IP", show=False),
+        Binding("2", "sort(1)", "Sort by CSF Status", show=False),
+        Binding("3", "sort(2)", "Sort by Established", show=False),
+        Binding("4", "sort(3)", "Sort by Time Wait", show=False),
+        Binding("5", "sort(4)", "Sort by SYN Recv", show=False),
     ]
 
     def __init__(self, *args, **kwargs):
@@ -791,8 +807,9 @@ class ConnectionTable(DataTable):
             time_wait = str(data.get('TIME_WAIT', 0))
             syn_recv = str(data.get('SYN_RECV', 0))
             # attacks = attack_results.get(ip, [])
-            attacks = False
-            attack_text = ", ".join(attacks) if attacks else ""
+            attacks = data.get('attacks', [])
+            # attack_text = ", ".join(attacks) if attacks else ""
+            attack_text = data.get('attack_text', '')
             
             rows_data.append((ip, csf_status, established, time_wait, syn_recv, attack_text, bool(attacks)))
         
@@ -810,8 +827,11 @@ class ConnectionTable(DataTable):
         for i, row_data in enumerate(rows_data):
             row = self.add_row(*row_data[:-1], key=str(i))
             if row_data[-1]:  # If has attacks
-                for cell in self.get_row_at(i):
-                    cell.style = "color: red"
+                cell_coordinates = Coordinate(i, 5)
+                self.update_cell_at(cell_coordinates, f"[on red][white][bold]{row_data[-2]}[/][/][/]")
+                # row.style = "on blue"
+                # for cell in self.get_row_at(i):
+                #     cell.style = "color: red"
                 
         # Restore selection if possible and desired
         if current_ip:
@@ -875,6 +895,39 @@ class ConnectionTable(DataTable):
         log.log_message(f"Temporary block for {ip}: {result}", "success")
         self._refresh_table_display()
 
+    async def action_cluster_block_temp(self) -> None:
+        """Block IP temporarily in CSF Cluster."""
+        ip = self.get_selected_ip()
+        if not ip:
+            return
+            
+        log = self.app.query_one(ActivityLog)
+        log.log_message(f"Blocking {ip} temporarily in CSF Cluster...", "warning")
+        result = await self.run_in_thread(block_in_csf, ip, True, 600, True)
+        csf_status = await self.run_in_thread(check_csf, ip)
+        if ip in self._raw_data:
+            self._raw_data[ip]['csf_status'] = csf_status
+        log.log_message(f"Temporary block for {ip} in CSF Cluster: {result}", "success")
+        self._refresh_table_display()
+
+    async def action_cluster_block_subnet(self) -> None:
+        """Block the subnet of the selected IP temporarily in CSF Cluster."""
+        ip = self.get_selected_ip()
+        if not ip:
+            return
+            
+        log = self.app.query_one(ActivityLog)
+        subnet = get_subnet(ip)
+        
+        if subnet == ip:
+            log.log_message(f"Failed to calculate subnet for {ip}", "error")
+            return
+            
+        log.log_message(f"Blocking subnet {subnet} temporarily...", "info")
+        result = await self.run_in_thread(block_in_csf, subnet, True, 600, True)
+        log.log_message(f"Temporary block for subnet {subnet} in CSF Cluster: {result}", "success")
+        self._refresh_table_display()
+
     async def action_block_subnet(self) -> None:
         """Block the subnet of the selected IP temporarily."""
         ip = self.get_selected_ip()
@@ -906,6 +959,21 @@ class ConnectionTable(DataTable):
         if ip in self._raw_data:
             self._raw_data[ip]['csf_status'] = csf_status
         log.log_message(f"Permanent block for {ip}: {result}", "success")
+        self._refresh_table_display()
+
+    async def action_cluster_block_perm(self) -> None:
+        """Block IP permanently in CSF Cluster."""
+        ip = self.get_selected_ip()
+        if not ip:
+            return
+            
+        log = self.app.query_one(ActivityLog)
+        log.log_message(f"Blocking {ip} permanently...", "warning")
+        result = await self.run_in_thread(block_in_csf, ip, False, 600, True)
+        csf_status = await self.run_in_thread(check_csf, ip)
+        if ip in self._raw_data:
+            self._raw_data[ip]['csf_status'] = csf_status
+        log.log_message(f"Permanent block for {ip} in CSF Cluster: {result}", "success")
         self._refresh_table_display()
 
     async def action_apache_status(self) -> None:
@@ -1008,14 +1076,12 @@ class ConnectionTable(DataTable):
         self._sort_column = 3  # Track current sort column, default to TIME_WAIT
         self._sort_reverse = True  # Track sort direction, default to descending
         self._raw_data = {}  # Store raw connection data
-        self.add_columns(
-            "IP Address",
-            "CSF Status",
-            "ESTABLISHED",
-            "TIME_WAIT", 
-            "SYN_RECV",
-            "Attack Analysis"
-        )
+        self.add_column("IP Address", width=20)
+        self.add_column("CSF Status", width=30)
+        self.add_column("ESTABLISHED", width=15)
+        self.add_column("TIME_WAIT", width=15)
+        self.add_column("SYN_RECV", width=15)
+        self.add_column("Attack Analysis", width=30)
         self.update_data()
         
     def on_data_table_row_selected(self, event) -> None:
@@ -1042,7 +1108,8 @@ class ConnectionTable(DataTable):
 
 class NetworkApp(App):
     """The main network monitoring application."""
-    # ENABLE_COMMAND_PALETTE = True
+    TITLE = "HEIMER - LS Web Attack Response Tool"
+    ENABLE_COMMAND_PALETTE = False
     # COMMANDS = App.COMMANDS
     CSS = """
     Screen {
@@ -1068,6 +1135,7 @@ class NetworkApp(App):
     
     BINDINGS = [
         ("r", "refresh", "Refresh data"),
+        ("h", "toggle_help", "Toggle help"),
         ("q", "quit", "Quit"),
     ]
     
@@ -1088,12 +1156,79 @@ class NetworkApp(App):
         self.query_one(ActivityLog).log_message("Application started", "info")
         self.query_one(ConnectionTable).update_data()
         self.query_one(ActivityLog).log_message("Initial data loaded", "success")
+        # self.query_one(ActivityLog).log_message("Detected Server IPs: " + str(SERVER_ADDRESSES), "info")
 
     def action_refresh(self) -> None:
         """Refresh the connection data."""
         self.query_one(ActivityLog).log_message("Refreshing connection data...", "info")
         self.query_one(ConnectionTable).update_data()
         self.query_one(ActivityLog).log_message("Data refreshed", "success")
+    
+    def action_toggle_help(self) -> None:
+        """Toggle the help screen."""
+        self.app.push_screen(HelpScreen(self))
+
+class HelpScreen(ModalScreen[None]):
+    """ Screen to show help information"""
+    BINDINGS = [
+        Binding('escape', 'app.pop_screen', 'Close'),
+        Binding("q", "app.pop_screen", "Close"),
+        ]
+
+    DEFAULT_CSS = """
+    HelpScreen {
+       align: center middle;
+
+    }
+    #help-container {
+        width: auto;
+        max-width: 70%;
+        height: auto;
+        max-height: 80%;
+        background: $surface;
+        padding: 1 2;
+    }
+    #help-container .title {
+        text-style: bold;
+    }
+    """
+    def compose(self) -> ComposeResult:
+        with Container(id="help-container"):
+            yield Label("HEIMER - Web Attack Response Tool", classes="title")
+            yield Label("")
+            yield Label("Overview")
+            yield Label("--------")
+            yield Label("A terminal-based web connection monitoring tool with CSF firewall integration.")
+            yield Label("")
+            yield Label("Keyboard Shortcuts")
+            yield Label("-------")
+            yield Label("r - Refresh data")
+            yield Label("h - Toggle help")
+            yield Label("q - Quit")
+            yield Label("p - IPPTR Lookup")
+            yield Label("w - IP WHOIS Lookup")
+            yield Label("c - Check IP status in CSF")
+            yield Label("a - List IP connections in Apache Status Page")
+            yield Label("t - Temporary Block IP in CSF")
+            yield Label("y - Temporary Blcok IP in CSF Cluster (All shared servers)")
+            yield Label("b - Permanent Block IP in CSF")
+            yield Label("z - Permanent Block IP in CSF Cluster (All shared servers)")
+            yield Label("s - Temporary Block Subnet in CSF")
+            yield Label("n - Temporary Block Subnet in CSF Cluster (All shared servers)")
+            yield Label("x -  Attempt Automatic Attack Pattern Analysis")
+            yield Label("1~5 - Sort table by column")
+            yield Label("")
+            yield Label("Press ESC to close.")
+            yield Label("")
+            yield Label("Report any bugs or issues at https://github.com/libyanspiderllc/HEIMER/issues")
+            yield Label("")
+            yield Label("Version 1.0.8, Developed by Libyan Spider")
+            yield Label("")
+            yield Footer()
+
+    def read_version_from_file(self):
+        with open("VERSION.txt", "r") as f:
+            return f.read().strip()
 
 def main():
     app = NetworkApp()
