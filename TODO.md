@@ -7,3 +7,4 @@
 - [-] Add CSF cluster block
 - [ ] Add versioning
 - [x] Add help screen
+- [ ] Add copy IP to clipboard
