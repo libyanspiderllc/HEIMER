@@ -12,6 +12,23 @@ A terminal-based network connection monitoring tool with advanced IP management 
 - IP lookup and blocking capabilities
 - Terminal-based UI with sorting and filtering
 
+## Installation
+For CloudLinux\CentOS 7:
+```
+cd ~
+wget https://github.com/libyanspiderllc/HEIMER/releases/latest/download/heimer_centos7 -O heimer_centos7
+mv -f heimer_centos7 /usr/local/bin/heimer
+chmod +x /usr/local/bin/heimer
+```
+
+For CloudLinux\AlmaLinux 8+:
+```
+cd ~
+wget https://github.com/libyanspiderllc/HEIMER/releases/latest/download/heimer_alma8 -O heimer_alma8
+mv -f heimer_alma8 /usr/local/bin/heimer
+chmod +x /usr/local/bin/heimer
+```
+
 ## Building the Application
 
 ### Option 1: Docker Build (Recommended)
@@ -142,6 +159,12 @@ black .
 
 2. GLIBC version issues
    - Solution: Use the Docker build method which ensures compatibility
+
+3. Whois is not installed
+   - Solution: Install whois
+     ```bash
+     sudo dns install whois
+     ```
 
 ## License
 
