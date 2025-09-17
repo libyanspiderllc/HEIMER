@@ -27,7 +27,7 @@ Steps:
    ./docker-build.sh
    ```
 
-The binary will be created at `dist/arcane`.
+The binary will be created at `dist/heimer`.
 
 ### Option 2: Direct Build
 
@@ -65,7 +65,7 @@ Prerequisites:
 
 Run the binary:
 ```bash
-./dist/arcane
+./dist/heimer
 ```
 
 ### Running from Source
@@ -82,15 +82,21 @@ Run the binary:
 
 ## Key Bindings
 
-- `p`: PTR Lookup
-- `w`: WHOIS Lookup
-- `c`: CSF Check
-- `t`: Temporary Block IP
-- `s`: Temporary Block Subnet
-- `b`: Permanent Block IP
-- `1-5`: Column Sorting
-- `r`: Refresh Data
-- `q`: Quit
+- `r` - Refresh data
+- `h` - Toggle help
+- `q` - Quit
+- `p` - IP PTR Lookup
+- `w` - IP WHOIS Lookup
+- `c` - Check IP status in CSF
+- `a` - List IP connections in Apache Status Page
+- `t` - Temporary Block IP in CSF
+- `y` - Temporary Block IP in CSF Cluster
+- `b` - Permanent Block IP in CSF
+- `z` - Permanent Block IP in CSF Cluster
+- `s` - Temporary Block Subnet in CSF
+- `n` - Temporary Block Subnet in CSF Cluster
+- `x` -  Attempt Automatic Attack Pattern Analysis
+- `1~5` - Sort table by column
 
 ## Development
 

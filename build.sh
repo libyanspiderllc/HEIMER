@@ -15,13 +15,13 @@ pip install -r requirements.txt
 echo "Building binary..."
 pyinstaller build.spec --clean
 
-echo "Binary created at: dist/arcane"
+echo "Binary created at: dist/heimer"
 
 # Optional: Create a release tarball
 echo "Creating release tarball..."
 cd dist
-tar czf arcane-linux.tar.gz arcane
+tar czf heimer-linux.tar.gz heimer
 cd ..
 
-echo "Build complete! You can find the binary at dist/arcane"
-echo "Or use the tarball at dist/arcane-linux.tar.gz"
+echo "Build complete! You can find the binary at dist/heimer"
+echo "Or use the tarball at dist/heimer-linux.tar.gz"
