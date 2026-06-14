@@ -8,3 +8,5 @@
 - [ ] Add versioning
 - [x] Add help screen
 - [ ] Add copy IP to clipboard
+- [x] Add highlighting for Sucuri and Cloudflare IPs
+- [x] Handle obfuscated Apache Status URL

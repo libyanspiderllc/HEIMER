@@ -209,7 +209,23 @@
 
 <tr><td><b>42-19</b></td><td>-</td><td>0/0/2</td><td>.
 </td><td>0.00</td><td>241070</td><td>1</td><td>5</td><td>0.0</td><td>0.00</td><td>0.01
-</td><td>109.237.27.11</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>GET /db/webdb/index.php?lang=en HTTP/1.1</td></tr>
+</td><td>192.88.135.3</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>GET /db/webdb/index.php?lang=en HTTP/1.1</td></tr>
+
+<tr><td><b>42-19</b></td><td>-</td><td>0/0/2</td><td>.
+</td><td>0.00</td><td>241070</td><td>1</td><td>5</td><td>0.0</td><td>0.00</td><td>0.01
+</td><td>192.88.135.3</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>GET /db/webdb/index.php?lang=en HTTP/1.1</td></tr>
+
+<tr><td><b>42-19</b></td><td>-</td><td>0/0/2</td><td>.
+</td><td>0.00</td><td>241070</td><td>1</td><td>5</td><td>0.0</td><td>0.00</td><td>0.01
+</td><td>192.88.135.3</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>GET /db/webdb/index.php?lang=en HTTP/1.1</td></tr>
+
+<tr><td><b>42-19</b></td><td>-</td><td>0/0/2</td><td>.
+</td><td>0.00</td><td>241070</td><td>1</td><td>5</td><td>0.0</td><td>0.00</td><td>0.01
+</td><td>192.88.135.3</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>GET /db/webdb/index.php?lang=en HTTP/1.1</td></tr>
+
+<tr><td><b>42-19</b></td><td>-</td><td>0/0/2</td><td>.
+</td><td>0.00</td><td>241070</td><td>1</td><td>5</td><td>0.0</td><td>0.00</td><td>0.01
+</td><td>192.88.135.3</td><td>http/1.1</td><td nowrap>lsx.server.ly:80</td><td nowrap>GET /db/webdb/index.php?lang=en HTTP/1.1</td></tr>
 
 <tr><td><b>43-19</b></td><td>-</td><td>0/0/3</td><td>.
 </td><td>0.00</td><td>241036</td><td>0</td><td>5</td><td>0.0</td><td>0.00</td><td>0.01

@@ -34,11 +34,52 @@ if TYPE_CHECKING:
 class ConnectionTable:  # Forward declaration
     pass
 
+# WAF IP Configuration
+CLOUDFLARE_IPS = [
+    "173.245.48.0/20", "103.21.244.0/22", "103.22.200.0/22", "103.31.4.0/22", 
+    "141.101.64.0/18", "108.162.192.0/18", "190.93.240.0/20", "188.114.96.0/20", 
+    "197.234.240.0/22", "198.41.128.0/17", "162.158.0.0/15", "104.16.0.0/13", 
+    "104.24.0.0/14", "172.64.0.0/13", "131.0.72.0/22", "2400:cb00::/32", 
+    "2606:4700::/32", "2803:f800::/32", "2405:b500::/32", "2405:8100::/32", 
+    "2a06:98c0::/29", "2c0f:f248::/32"
+]
+SUCURI_IPS = [
+    "192.88.134.0/23", "185.93.228.0/22", "2a02:fe80::/29", "66.248.200.0/22"
+]
+
+CLOUDFLARE_NETWORKS = [ipaddress.ip_network(ip) for ip in CLOUDFLARE_IPS]
+SUCURI_NETWORKS = [ipaddress.ip_network(ip) for ip in SUCURI_IPS]
+
+def get_waf_provider(ip_str: str) -> str:
+    try:
+        ip = ipaddress.ip_address(ip_str)
+        for net in CLOUDFLARE_NETWORKS:
+            if ip in net:
+                return "Cloudflare"
+        for net in SUCURI_NETWORKS:
+            if ip in net:
+                return "Sucuri"
+    except ValueError:
+        pass
+    return ""
+
 # Configuration
 MONITORED_PORTS = ["80", "443"]
 MONITORED_STATES = ["ESTABLISHED", "TIME_WAIT", "SYN_RECV"]
 PORTS_DISPLAY = "/".join(MONITORED_PORTS)
-APACHE_STATUS_URL = "http://127.0.0.1/whm-server-status"
+
+def get_apache_status_url() -> str:
+    """Get the correct Apache status URL, handling cPanel obfuscation."""
+    key_file = "/var/cpanel/whm_server_status_key"
+    try:
+        if os.path.exists(key_file):
+            with open(key_file, 'r') as f:
+                key = f.read().strip()
+                if key:
+                    return f"http://127.0.0.1/{key}"
+    except Exception:
+        pass
+    return "http://127.0.0.1/whm-server-status"
 
 def get_server_addresses():
     """Get all IP addresses (IPv4 and IPv6) of the server."""
@@ -72,7 +113,7 @@ def get_server_addresses():
 SERVER_ADDRESSES = get_server_addresses()
 
 # Test mode configuration
-TEST_MODE = False  # Set to False to use real netstat
+TEST_MODE = True  # Set to False to use real netstat
 TEST_DATA_FILE = os.path.join(os.path.dirname(__file__), "test_data", "netstat_sample.txt")
 
 # Global state for CSF status
@@ -371,7 +412,8 @@ class ApacheStatusParser(HTMLParser):
 def get_apache_status(ip: str) -> List[Dict[str, str]]:
     """Fetch and parse Apache status page for connections from specific IP."""
     try:
-        with urllib.request.urlopen(APACHE_STATUS_URL) as response:
+        status_url = get_apache_status_url()
+        with urllib.request.urlopen(status_url) as response:
             html = response.read().decode('utf-8')
             
         parser = ApacheStatusParser()
@@ -811,24 +853,31 @@ class ConnectionTable(DataTable):
             # attack_text = ", ".join(attacks) if attacks else ""
             attack_text = data.get('attack_text', '')
             
-            rows_data.append((ip, csf_status, established, time_wait, syn_recv, attack_text, bool(attacks)))
+            waf_provider = get_waf_provider(ip)
+            display_ip = Text(ip)
+            if waf_provider == "Cloudflare":
+                display_ip = Text(f"{ip} (Cloudflare)", style="bold cyan")
+            elif waf_provider == "Sucuri":
+                display_ip = Text(f"{ip} (Sucuri)", style="bold green")
+            
+            rows_data.append((display_ip, csf_status, established, time_wait, syn_recv, attack_text, bool(attacks), ip))
         
         # Sort the data if needed
         if self._sort_column is not None:
             rows_data.sort(
                 key=lambda x: (
                     int(x[self._sort_column]) if self._sort_column in [2, 3, 4] and x[self._sort_column].isdigit()
-                    else x[self._sort_column]
+                    else x[-1] if self._sort_column == 0 else x[self._sort_column]
                 ),
                 reverse=self._sort_reverse
             )
         
         # Add rows to the table
         for i, row_data in enumerate(rows_data):
-            row = self.add_row(*row_data[:-1], key=str(i))
-            if row_data[-1]:  # If has attacks
+            row = self.add_row(*row_data[:-2], key=str(i))
+            if row_data[-2]:  # If has attacks
                 cell_coordinates = Coordinate(i, 5)
-                self.update_cell_at(cell_coordinates, f"[on red][white][bold]{row_data[-2]}[/][/][/]")
+                self.update_cell_at(cell_coordinates, f"[on red][white][bold]{row_data[-3]}[/][/][/]")
                 # row.style = "on blue"
                 # for cell in self.get_row_at(i):
                 #     cell.style = "color: red"
@@ -836,7 +885,7 @@ class ConnectionTable(DataTable):
         # Restore selection if possible and desired
         if current_ip:
             for i, row_data in enumerate(rows_data):
-                if row_data[0] == current_ip:
+                if row_data[-1] == current_ip:
                     self.move_cursor(row=i)
                     break
                     
@@ -887,6 +936,10 @@ class ConnectionTable(DataTable):
             return
             
         log = self.app.query_one(ActivityLog)
+        waf = get_waf_provider(ip)
+        if waf:
+            log.log_message(f"Action ignored: IP {ip} belongs to {waf} and should not be blocked.", "warning")
+            return
         log.log_message(f"Blocking {ip} temporarily...", "warning")
         result = await self.run_in_thread(block_in_csf, ip, True)
         csf_status = await self.run_in_thread(check_csf, ip)
@@ -902,6 +955,10 @@ class ConnectionTable(DataTable):
             return
             
         log = self.app.query_one(ActivityLog)
+        waf = get_waf_provider(ip)
+        if waf:
+            log.log_message(f"Action ignored: IP {ip} belongs to {waf} and should not be blocked.", "warning")
+            return
         log.log_message(f"Blocking {ip} temporarily in CSF Cluster...", "warning")
         result = await self.run_in_thread(block_in_csf, ip, True, 600, True)
         csf_status = await self.run_in_thread(check_csf, ip)
@@ -917,6 +974,10 @@ class ConnectionTable(DataTable):
             return
             
         log = self.app.query_one(ActivityLog)
+        waf = get_waf_provider(ip)
+        if waf:
+            log.log_message(f"Action ignored: IP {ip} belongs to {waf} and should not be blocked.", "warning")
+            return
         subnet = get_subnet(ip)
         
         if subnet == ip:
@@ -935,6 +996,10 @@ class ConnectionTable(DataTable):
             return
             
         log = self.app.query_one(ActivityLog)
+        waf = get_waf_provider(ip)
+        if waf:
+            log.log_message(f"Action ignored: IP {ip} belongs to {waf} and should not be blocked.", "warning")
+            return
         subnet = get_subnet(ip)
         
         if subnet == ip:
@@ -953,6 +1018,10 @@ class ConnectionTable(DataTable):
             return
             
         log = self.app.query_one(ActivityLog)
+        waf = get_waf_provider(ip)
+        if waf:
+            log.log_message(f"Action ignored: IP {ip} belongs to {waf} and should not be blocked.", "warning")
+            return
         log.log_message(f"Blocking {ip} permanently...", "warning")
         result = await self.run_in_thread(block_in_csf, ip, False)
         csf_status = await self.run_in_thread(check_csf, ip)
@@ -968,6 +1037,10 @@ class ConnectionTable(DataTable):
             return
             
         log = self.app.query_one(ActivityLog)
+        waf = get_waf_provider(ip)
+        if waf:
+            log.log_message(f"Action ignored: IP {ip} belongs to {waf} and should not be blocked.", "warning")
+            return
         log.log_message(f"Blocking {ip} permanently...", "warning")
         result = await self.run_in_thread(block_in_csf, ip, False, 600, True)
         csf_status = await self.run_in_thread(check_csf, ip)
@@ -1076,12 +1149,12 @@ class ConnectionTable(DataTable):
         self._sort_column = 3  # Track current sort column, default to TIME_WAIT
         self._sort_reverse = True  # Track sort direction, default to descending
         self._raw_data = {}  # Store raw connection data
-        self.add_column("IP Address", width=20)
+        self.add_column("IP Address", width=35)
         self.add_column("CSF Status", width=30)
         self.add_column("ESTABLISHED", width=15)
         self.add_column("TIME_WAIT", width=15)
         self.add_column("SYN_RECV", width=15)
-        self.add_column("Attack Analysis", width=30)
+        self.add_column("Attack Analysis", width=40)
         self.update_data()
         
     def on_data_table_row_selected(self, event) -> None:
@@ -1102,7 +1175,12 @@ class ConnectionTable(DataTable):
             if self.cursor_row is None:
                 self.app.query_one(ActivityLog).log_message("Please select an IP address first", "warning")
                 return None
-            return self.get_cell_at(Coordinate(self.cursor_row, 0))
+            value = self.get_cell_at(Coordinate(self.cursor_row, 0))
+            if hasattr(value, 'plain'):
+                value = value.plain
+            else:
+                value = str(value)
+            return value.split(" ")[0]
         except Exception:
             return None
 
