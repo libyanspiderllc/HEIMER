@@ -14,6 +14,7 @@ from typing import Iterable
 from rich.text import Text
 from rich.syntax import Syntax
 import subprocess
+import json
 from collections import defaultdict
 import re
 import socket
@@ -68,6 +69,16 @@ MONITORED_PORTS = ["80", "443"]
 MONITORED_STATES = ["ESTABLISHED", "TIME_WAIT", "SYN_RECV"]
 PORTS_DISPLAY = "/".join(MONITORED_PORTS)
 
+def get_app_version() -> str:
+    version_file = os.path.join(os.path.dirname(__file__), "VERSION.txt")
+    try:
+        with open(version_file, 'r') as f:
+            return f.read().strip()
+    except Exception:
+        return "Unknown"
+
+APP_VERSION = get_app_version()
+
 def get_apache_status_url() -> str:
     """Get the correct Apache status URL, handling cPanel obfuscation."""
     key_file = "/var/cpanel/whm_server_status_key"
@@ -113,7 +124,7 @@ def get_server_addresses():
 SERVER_ADDRESSES = get_server_addresses()
 
 # Test mode configuration
-TEST_MODE = True  # Set to False to use real netstat
+TEST_MODE = False  # Set to False to use real netstat
 TEST_DATA_FILE = os.path.join(os.path.dirname(__file__), "test_data", "netstat_sample.txt")
 
 # Global state for CSF status
@@ -409,6 +420,29 @@ class ApacheStatusParser(HTMLParser):
         """Return the list of parsed connections."""
         return self.connections
 
+def get_server_metrics() -> Dict[str, str]:
+    """Fetch and parse overall server metrics from Apache "?auto" page."""
+    if TEST_MODE:
+        try:
+            with open(os.path.join(os.path.dirname(__file__), "test_data", "apache_auto_status.txt"), 'r') as f:
+                content = f.read()
+        except FileNotFoundError:
+            return {}
+    else:
+        try:
+            status_url = f"{get_apache_status_url()}?auto"
+            with urllib.request.urlopen(status_url, timeout=3) as response:
+                content = response.read().decode('utf-8')
+        except Exception:
+            return {}
+            
+    metrics = {}
+    for line in content.splitlines():
+        if ':' in line:
+            parts = line.split(':', 1)
+            metrics[parts[0].strip()] = parts[1].strip()
+    return metrics
+
 def get_apache_status(ip: str) -> List[Dict[str, str]]:
     """Fetch and parse Apache status page for connections from specific IP."""
     try:
@@ -425,6 +459,56 @@ def get_apache_status(ip: str) -> List[Dict[str, str]]:
         return []
     except Exception as e:
         return []
+
+class ServerMetrics(Static):
+    """Widget displaying server metrics."""
+    DEFAULT_CSS = """
+    ServerMetrics {
+        height: 1;
+        background: $boost;
+        color: $text;
+        content-align: center middle;
+    }
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.auto_refresh_status = False
+        self._last_metrics: dict = {}
+
+    def update_metrics(self, metrics: dict):
+        self._last_metrics = metrics
+        self._render_bar()
+
+    def render(self):
+        self._render_bar()
+        return super().render()
+
+    def _render_bar(self):
+        metrics = self._last_metrics
+        if not metrics:
+            ar_indicator = " | [bold green]⟳ AUTO[/]" if self.auto_refresh_status else ""
+            self.update(f"[bold red]Metrics Unavailable[/bold red]{ar_indicator}")
+            return
+
+        load1   = metrics.get('Load1', 'N/A')
+        load5   = metrics.get('Load5', 'N/A')
+        load15  = metrics.get('Load15', 'N/A')
+        req_sec = metrics.get('ReqPerSec', 'N/A')
+        busy    = metrics.get('BusyWorkers', 'N/A')
+        idle    = metrics.get('IdleWorkers', 'N/A')
+        cpu     = metrics.get('CPULoad', 'N/A')
+
+        ar_indicator = " | [bold green]⟳ AUTO ON[/]" if self.auto_refresh_status else " | [dim]⟳ AUTO OFF[/]"
+
+        display_text = (
+            f"[bold cyan]Load:[/] {load1}, {load5}, {load15} | "
+            f"[bold cyan]CPU:[/] {cpu}% | "
+            f"[bold cyan]Req/s:[/] {req_sec} | "
+            f"[bold cyan]Workers:[/] {busy} Busy / {idle} Idle"
+            f"{ar_indicator}"
+        )
+        self.update(display_text)
 
 class TitleBox(Static):
     """Title and welcome message widget."""
@@ -516,6 +600,87 @@ class WhoisScreen(ModalScreen[None]):
         """Handle button presses."""
         if event.button.id == "close-button":
             self.app.pop_screen()
+
+class GeoInfoScreen(ModalScreen[None]):
+    """Modal screen for displaying GeoIP and ASN information."""
+
+    BINDINGS = [
+        Binding("escape", "app.pop_screen", "Close"),
+        Binding("q", "app.pop_screen", "Close"),
+    ]
+
+    DEFAULT_CSS = """
+    GeoInfoScreen {
+        align: center middle;
+    }
+
+    #geoip-container {
+        width: 60;
+        height: auto;
+        border: thick $primary;
+        background: $surface;
+        padding: 1 2;
+    }
+
+    #geoip-header {
+        background: $accent;
+        color: $text;
+        padding: 1;
+        text-align: center;
+        width: 100%;
+        margin-bottom: 1;
+    }
+
+    #geoip-close {
+        width: 100%;
+        margin-top: 1;
+    }
+    """
+
+    def __init__(self, ip: str, geo_data: dict):
+        super().__init__()
+        self.ip = ip
+        self.geo_data = geo_data
+
+    def compose(self) -> ComposeResult:
+        with Container(id="geoip-container"):
+            yield Label(f"GeoIP / ASN — {self.ip}", id="geoip-header")
+            if not self.geo_data:
+                yield Label("[bold red]Lookup failed or IP is private/reserved.[/bold red]")
+            else:
+                country   = self.geo_data.get('country', 'N/A')
+                country_code = self.geo_data.get('countryCode', '')
+                region    = self.geo_data.get('regionName', 'N/A')
+                city      = self.geo_data.get('city', 'N/A')
+                isp       = self.geo_data.get('isp', 'N/A')
+                org       = self.geo_data.get('org', 'N/A')
+                asn       = self.geo_data.get('as', 'N/A')
+                yield Label(f"[bold cyan]Country :[/]  {country} ({country_code})")
+                yield Label(f"[bold cyan]Region  :[/]  {region}")
+                yield Label(f"[bold cyan]City    :[/]  {city}")
+                yield Label(f"[bold cyan]ISP     :[/]  {isp}")
+                yield Label(f"[bold cyan]Org     :[/]  {org}")
+                yield Label(f"[bold cyan]ASN     :[/]  {asn}")
+            with Center():
+                yield Button("Close (ESC/Q)", variant="primary", id="geoip-close")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "geoip-close":
+            self.app.pop_screen()
+
+
+def get_geoip_info(ip: str) -> dict:
+    """Fetch GeoIP and ASN data from ip-api.com."""
+    try:
+        url = f"http://ip-api.com/json/{ip}?fields=status,country,countryCode,regionName,city,isp,org,as"
+        with urllib.request.urlopen(url, timeout=5) as response:
+            data = json.loads(response.read().decode('utf-8'))
+            if data.get('status') == 'success':
+                return data
+    except Exception:
+        pass
+    return {}
+
 
 class ApacheStatusScreen(ModalScreen):
     """Modal screen for displaying Apache status information."""
@@ -780,16 +945,17 @@ class ConnectionTable(DataTable):
     BINDINGS = [
         Binding("p", "ptr_lookup", "PTR", show=True),
         Binding("w", "whois_lookup", "WHOIS", show=True),
-        Binding("c", "csf_check", "CSF Check", show=True),
+        Binding("g", "geoip_lookup", "GeoIP/ASN", show=True),
+        Binding("c", "csf_check", "CSF Check", show=False),
         Binding("a", "apache_status", "Apache Status", show=True),
         Binding("t", "block_temp", "Temp Block", show=True),
-        Binding("y", "cluster_block_temp", "Cluster Temp Block", show=True),
+        Binding("y", "cluster_block_temp", "Cluster Temp Block", show=False),
         Binding("b", "block_perm", "Perm Block", show=True),
-        Binding("z", "cluster_block_perm", "Cluster Perm Block", show=True),        
-        Binding("s", "block_subnet", "Temp Block Subnet", show=True),
-        Binding("n", "cluster_block_subnet", "Cluster Temp Block Subnet", show=True),
-        # Binding("v", "cluser_csf_check", "Cluster CSF Check", show=True),
-        Binding("x", "analyze_attacks", "Analyze Attacks", show=True),
+        Binding("z", "cluster_block_perm", "Cluster Perm Block", show=False),
+        Binding("s", "block_subnet", "Temp Block Subnet", show=False),
+        Binding("n", "cluster_block_subnet", "Cluster Temp Block Subnet", show=False),
+        # Binding("v", "cluser_csf_check", "Cluster CSF Check", show=False),
+        Binding("x", "analyze_attacks", "Analyze Attacks", show=False),
         Binding("1", "sort(0)", "Sort by IP", show=False),
         Binding("2", "sort(1)", "Sort by CSF Status", show=False),
         Binding("3", "sort(2)", "Sort by Established", show=False),
@@ -910,6 +1076,16 @@ class ConnectionTable(DataTable):
             self.app.query_one(ActivityLog).log_message(f"Fetching WHOIS information for {ip}...", "info")
             result = await self.run_in_thread(perform_whois_lookup, ip)
             self.app.push_screen(WhoisScreen(ip, result, self))
+
+    async def action_geoip_lookup(self) -> None:
+        """Perform GeoIP/ASN lookup for selected IP."""
+        ip = self.get_selected_ip()
+        if ip:
+            log = self.app.query_one(ActivityLog)
+            log.log_message(f"Fetching GeoIP/ASN info for {ip}...", "info")
+            loop = asyncio.get_event_loop()
+            data = await loop.run_in_executor(None, get_geoip_info, ip)
+            self.app.push_screen(GeoInfoScreen(ip, data))
 
     async def action_csf_check(self) -> None:
         """Check if IP is in CSF."""
@@ -1150,7 +1326,7 @@ class ConnectionTable(DataTable):
         self._sort_reverse = True  # Track sort direction, default to descending
         self._raw_data = {}  # Store raw connection data
         self.add_column("IP Address", width=35)
-        self.add_column("CSF Status", width=30)
+        self.add_column("CSF Status", width=25)
         self.add_column("ESTABLISHED", width=15)
         self.add_column("TIME_WAIT", width=15)
         self.add_column("SYN_RECV", width=15)
@@ -1187,7 +1363,7 @@ class ConnectionTable(DataTable):
 class NetworkApp(App):
     """The main network monitoring application."""
     TITLE = "HEIMER - LS Web Attack Response Tool"
-    ENABLE_COMMAND_PALETTE = False
+    ENABLE_COMMAND_PALETTE = True
     # COMMANDS = App.COMMANDS
     CSS = """
     Screen {
@@ -1213,9 +1389,12 @@ class NetworkApp(App):
     
     BINDINGS = [
         ("r", "refresh", "Refresh data"),
-        ("h", "toggle_help", "Toggle help"),
+        ("A", "toggle_auto_refresh", "Auto-Refresh"),
+        ("h", "toggle_help", "Help (All Shortcuts)"),
         ("q", "quit", "Quit"),
     ]
+
+    AUTO_REFRESH_INTERVAL = 5  # seconds
     
     def get_system_commands(self, screen: Screen) -> Iterable[SystemCommand]:
         yield from super().get_system_commands(screen)  
@@ -1223,16 +1402,22 @@ class NetworkApp(App):
 
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
-        yield Header()
+        yield Header(show_clock=True)
+        yield ServerMetrics()
         yield ConnectionTable()
         yield ActivityLog()
         yield Footer()
 
     def on_mount(self) -> None:
         """Handle app mount event."""
+        self._auto_refresh_active = False
+        self._auto_refresh_timer = self.set_interval(
+            self.AUTO_REFRESH_INTERVAL, self._auto_refresh_tick, pause=True
+        )
         # Initial data load
         self.query_one(ActivityLog).log_message("Application started", "info")
         self.query_one(ConnectionTable).update_data()
+        self.update_server_metrics()
         self.query_one(ActivityLog).log_message("Initial data loaded", "success")
         # self.query_one(ActivityLog).log_message("Detected Server IPs: " + str(SERVER_ADDRESSES), "info")
 
@@ -1240,7 +1425,41 @@ class NetworkApp(App):
         """Refresh the connection data."""
         self.query_one(ActivityLog).log_message("Refreshing connection data...", "info")
         self.query_one(ConnectionTable).update_data()
+        self.update_server_metrics()
         self.query_one(ActivityLog).log_message("Data refreshed", "success")
+
+    def _auto_refresh_tick(self) -> None:
+        """Called by the interval timer to auto-refresh data silently."""
+        self.query_one(ConnectionTable).update_data()
+        self.update_server_metrics()
+
+    def action_toggle_auto_refresh(self) -> None:
+        """Toggle the auto-refresh timer on or off."""
+        log = self.query_one(ActivityLog)
+        metrics = self.query_one(ServerMetrics)
+        if self._auto_refresh_active:
+            self._auto_refresh_timer.pause()
+            self._auto_refresh_active = False
+            log.log_message("Auto-refresh disabled.", "info")
+            metrics.auto_refresh_status = False
+            metrics.refresh()
+        else:
+            self._auto_refresh_timer.resume()
+            self._auto_refresh_active = True
+            log.log_message(f"Auto-refresh enabled ({self.AUTO_REFRESH_INTERVAL}s interval).", "success")
+            metrics.auto_refresh_status = True
+            metrics.refresh()
+        
+    def update_server_metrics(self) -> None:
+        """Update server metrics asynchronously."""
+        metrics_widget = self.query_one(ServerMetrics)
+        
+        async def fetch_and_update():
+            loop = asyncio.get_event_loop()
+            metrics = await loop.run_in_executor(None, get_server_metrics)
+            metrics_widget.update_metrics(metrics)
+            
+        asyncio.create_task(fetch_and_update())
     
     def action_toggle_help(self) -> None:
         """Toggle the help screen."""
@@ -1278,13 +1497,19 @@ class HelpScreen(ModalScreen[None]):
             yield Label("--------")
             yield Label("A terminal-based web connection monitoring tool with CSF firewall integration.")
             yield Label("")
+            yield Label("Tips")
+            yield Label("----")
+            yield Label("Hold down Shift while selecting text to copy it to your local clipboard natively.")
+            yield Label("")
             yield Label("Keyboard Shortcuts")
             yield Label("-------")
             yield Label("r - Refresh data")
+            yield Label("A - Toggle Auto-Refresh (10s interval)")
             yield Label("h - Toggle help")
             yield Label("q - Quit")
             yield Label("p - IP PTR Lookup")
             yield Label("w - IP WHOIS Lookup")
+            yield Label("g - GeoIP / ASN Lookup")
             yield Label("c - Check IP status in CSF")
             yield Label("a - List IP connections in Apache Status Page")
             yield Label("t - Temporary Block IP in CSF")
@@ -1300,7 +1525,7 @@ class HelpScreen(ModalScreen[None]):
             yield Label("")
             yield Label("Report any bugs or issues at https://github.com/libyanspiderllc/HEIMER/issues")
             yield Label("")
-            yield Label("Version 1.0.8, Developed by Libyan Spider")
+            yield Label(f"Version {APP_VERSION}, Developed by Libyan Spider")
             yield Label("")
             yield Footer()
 

@@ -1,0 +1,50 @@
+127.0.0.1
+ServerVersion: Apache/2.4.68 (cPanel) OpenSSL/1.1.1k mod_bwlimited/1.4 Phusion_Passenger/6.1.2
+ServerMPM: prefork
+Server Built: Jun 10 2026 15:42:57
+CurrentTime: Sunday, 14-Jun-2026 12:02:25 EET
+RestartTime: Saturday, 13-Jun-2026 19:46:24 EET
+ParentServerConfigGeneration: 17
+ParentServerMPMGeneration: 16
+ServerUptimeSeconds: 58561
+ServerUptime: 16 hours 16 minutes 1 second
+Load1: 13.73
+Load5: 13.12
+Load15: 12.65
+Total Accesses: 2045202
+Total kBytes: 177809635
+Total Duration: 4312299005
+CPUUser: 20.05
+CPUSystem: 111.77
+CPUChildrenUser: 9016.55
+CPUChildrenSystem: 3039.66
+CPULoad: 20.8125
+Uptime: 58561
+ReqPerSec: 34.9243
+BytesPerSec: 3109190
+BytesPerReq: 89026.4
+DurationPerReq: 2108.5
+BusyWorkers: 50
+GracefulWorkers: 0
+IdleWorkers: 17
+Scoreboard: _CCWC_WC_W____RR.RW..W.CWWW..WW__CW_.WWCWRWCWWWCCWCW_WC..WW__WW___WW..RWW.R.C.W....W................._..................................................................................................................................................................................................................................................................................................................................................................................................
+............
+TLSSessionCacheStatus
+CacheType: SHMCB
+CacheSharedMemory: 1024000
+CacheCurrentEntries: 4287
+CacheSubcaches: 32
+CacheIndexesPerSubcaches: 177
+CacheTimeLeftOldestAvg: 207
+CacheTimeLeftOldestMin: 187
+CacheTimeLeftOldestMax: 221
+CacheIndexUsage: 75%
+CacheUsage: 99%
+CacheStoreCount: 83323
+CacheReplaceCount: 0
+CacheExpireCount: 0
+CacheDiscardCount: 78043
+CacheRetrieveHitCount: 0
+CacheRetrieveMissCount: 20
+CacheRemoveHitCount: 1064
+CacheRemoveMissCount: 3

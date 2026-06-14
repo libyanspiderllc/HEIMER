@@ -2,11 +2,15 @@
 - [x] Add correlation with Apache status page
 - [x] Add attack type detection
 - [x] Exclude server own IP from Remote IPs
-- [ ] Add widget to show CPU load: 1m, 5m, 15m
+- [x] Add widget to show CPU load: 1m, 5m, 15m
 - [x] Default sort order by time_wait connections
 - [x] Add CSF cluster block
-- [ ] Add versioning
+- [x] Dynamic Version Loading
 - [x] Add help screen
-- [ ] Add copy IP to clipboard
+- [x] Add copy IP to clipboard
 - [x] Add highlighting for Sucuri and Cloudflare IPs
 - [x] Handle obfuscated Apache Status URL
+- [x] Integrate GeoIP and ASN Lookups
+- [x] Add Auto-Refresh Toggle
+- [ ] Add IP Abuse Reputation Check
+- [ ] Configuration loading
