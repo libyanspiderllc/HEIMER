@@ -14,3 +14,4 @@
 - [x] Add Auto-Refresh Toggle
 - [ ] Add IP Abuse Reputation Check
 - [ ] Configuration loading
+- [ ] Add changelog inside app

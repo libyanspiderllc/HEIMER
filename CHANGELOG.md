@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.1] - Unreleased
+
+### Fixed
+- Fixed an application crash when performing a WHOIS lookup on an IP address containing special/non-UTF-8 characters in its records.
+- Handled `NoMatches` exception during auto-refresh to prevent crashes when modal screens (like WHOIS) are active.
+
 ## [1.1.0] - 2026-06-14
 
 ### Added

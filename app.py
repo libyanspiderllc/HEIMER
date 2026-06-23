@@ -298,7 +298,7 @@ def perform_ptr_lookup(ip):
 def perform_whois_lookup(ip):
     """Perform WHOIS lookup for an IP address."""
     try:
-        result = subprocess.check_output(["whois", ip], text=True)
+        result = subprocess.check_output(["whois", ip], text=True, errors="replace")
         return result
     except subprocess.CalledProcessError:
         return "WHOIS lookup failed"
@@ -1430,7 +1430,11 @@ class NetworkApp(App):
 
     def _auto_refresh_tick(self) -> None:
         """Called by the interval timer to auto-refresh data silently."""
-        self.query_one(ConnectionTable).update_data()
+        try:
+            self.query_one(ConnectionTable).update_data()
+        except NoMatches:
+            pass
+            
         self.update_server_metrics()
 
     def action_toggle_auto_refresh(self) -> None:
@@ -1452,8 +1456,11 @@ class NetworkApp(App):
         
     def update_server_metrics(self) -> None:
         """Update server metrics asynchronously."""
-        metrics_widget = self.query_one(ServerMetrics)
-        
+        try:
+            metrics_widget = self.query_one(ServerMetrics)
+        except NoMatches:
+            return
+            
         async def fetch_and_update():
             loop = asyncio.get_event_loop()
             metrics = await loop.run_in_executor(None, get_server_metrics)
