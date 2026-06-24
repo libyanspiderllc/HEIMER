@@ -1363,7 +1363,7 @@ class ConnectionTable(DataTable):
 class NetworkApp(App):
     """The main network monitoring application."""
     TITLE = "HEIMER - LS Web Attack Response Tool"
-    ENABLE_COMMAND_PALETTE = True
+    ENABLE_COMMAND_PALETTE = False
     # COMMANDS = App.COMMANDS
     CSS = """
     Screen {
